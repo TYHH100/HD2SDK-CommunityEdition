@@ -14,7 +14,6 @@ from copy import deepcopy
 import copy
 from math import ceil
 from pathlib import Path
-import mathutils
 import os
 import configparser
 import requests
@@ -90,6 +89,7 @@ Global_texconvbin        = "texconv" if platform.system() == "Linux" else "texco
 Global_texconvpath       = f"{AddonPath}/deps/{Global_texconvbin}"
 Global_materialpath      = f"{AddonPath}/materials"
 Global_typehashpath      = f"{AddonPath}/hashlists/typehash.txt"
+Global_filehashpath      = f"{AddonPath}/hashlists/filehash.txt"
 Global_friendlynamespath = f"{AddonPath}/hashlists/friendlynames.txt"
 
 Global_archivehashpath   = f"{AddonPath}/hashlists/archivehashes.json"
@@ -174,12 +174,6 @@ TextureTypeLookup = {
         "Alpha Mask",
         "Base Color/Metallic"
     ),
-    "alphaclip+": (
-        "Normal/AO/Roughness",
-        "Emission",
-        "Base Color/Metallic",
-        "Alpha Mask",
-    ),
     "advanced": (
         "",
         "",
@@ -202,7 +196,6 @@ Global_Materials = (
         ("advanced", "Advanced", "A more comlpicated material, that is color, normal, emission and PBR capable which renders in the UI. Sourced from the Illuminate Overseer."),
         ("basic+", "Basic+", "A basic material with a color, normal, and PBR map which renders in the UI, Sourced from a SEAF NPC"),
         ("translucent", "Translucent", "A translucent with a solid set color and normal map. Sourced from the Terminid Larva Backpack."),
-        ("alphaclip+", "Alpha Clip+", "A material that supports an alpha mask which does not render in the UI. Extra features with emission. Sourced from a bot bio processor."),
         ("alphaclip", "Alpha Clip", "A material that supports an alpha mask which does not render in the UI. Sourced from a skeleton pile"),
         ("original", "Original", "The original template used for all mods uploaded to Nexus prior to the addon's public release, which is bloated with additional unnecessary textures. Sourced from a terminid"),
         ("basic", "Basic", "A basic material with a color, normal, and PBR map. Sourced from a trash bag prop"),
@@ -328,11 +321,11 @@ def GetDisplayData():
     return [DisplayTocEntries, DisplayTocTypes]
 
 def SaveUnsavedEntries(self):
-    for entries in list(Global_TocManager.ActivePatch.TocDict.values()):
-        for entry in list(entries.values()):
-            if not entry.IsModified:
-                Global_TocManager.Save(int(entry.FileID), entry.TypeID)
-                PrettyPrint(f"Saved {int(entry.FileID)}")
+    for entry_type, entries in Global_TocManager.ActivePatch.TocDict.items():
+        for Entry in entries.values():
+            if not Entry.IsModified:
+                Global_TocManager.Save(int(Entry.FileID), Entry.TypeID)
+                PrettyPrint(f"Saved {int(Entry.FileID)}")
 
 def RandomHash16():
     global Global_previousRandomHash
@@ -395,6 +388,11 @@ def AddFriendlyName(ID, Name):
     SaveFriendlyNames()
 
 def SaveFriendlyNames():
+    with open(Global_filehashpath, 'w') as f:
+        for hash_info in Global_NameHashes:
+            if hash_info[1] != "" and int(hash_info[0]) == murmur64_hash(hash_info[1].encode()):
+                string = str(hash_info[0]) + " " + str(hash_info[1])
+                f.writelines(string+"\n")
     with open(Global_friendlynamespath, 'w') as f:
         for hash_info in Global_NameHashes:
             if hash_info[1] != "":
@@ -415,6 +413,11 @@ def LoadTypeHashes():
 Global_NameHashes = []
 def LoadNameHashes():
     Loaded = []
+    with open(Global_filehashpath, 'r') as f:
+        for line in f.readlines():
+            parts = line.split(" ")
+            Global_NameHashes.append([int(parts[0]), parts[1].replace("\n", "")])
+            Loaded.append(int(parts[0]))
     with open(Global_friendlynamespath, 'r') as f:
         for line in f.readlines():
             parts = line.split(" ", 1)
@@ -492,7 +495,7 @@ def GetTempDir():
         return Global_tempdir
     else:
         return tempfile.gettempdir()
-    
+
 #endregion
 
 #region Classes and Functions: Stingray Archives
@@ -600,7 +603,9 @@ class TocEntry:
                 self.LoadedData = callback(self.FileID, self.TocData, self.GpuData, self.StreamData, Reload, MakeBlendObject, LoadMaterialSlotNames)
             else:
                 self.LoadedData = callback(self.FileID, self.TocData, self.GpuData, self.StreamData, Reload, MakeBlendObject)
-            if self.LoadedData == None: raise Exception("Archive Entry Load Failed")
+            if self.LoadedData == None:
+                PrettyPrint(f"Archive Entry Load Failed for entry {self.FileID} of type {self.TypeID}", "error")
+                return
             self.IsLoaded = True
 
     # -- Write Data -- #
@@ -774,7 +779,12 @@ class StreamToc:
         if SerializeData:
             for entry_type, entries in self.TocDict.items():
                 for FileEntry in entries.values():
-                    FileEntry.SerializeData(self.TocFile, self.GpuFile, self.StreamFile)
+                    try:
+                        FileEntry.SerializeData(self.TocFile, self.GpuFile, self.StreamFile)
+                    except Exception as e:
+                        # Skip this entry if it has invalid offsets
+                        PrettyPrint(f"Skipping entry {FileEntry.FileID} of type {FileEntry.TypeID} due to invalid offsets: {e}", "warn")
+                        continue
 
         # re-write toc entry info with updated offsets
         if self.TocFile.IsWriting():
@@ -1288,7 +1298,7 @@ def SaveStingrayMaterial(self, ID, TocData, GpuData, StreamData, LoadedData):
             Global_TocManager.RemoveEntryFromPatch(oldTexID, TexID)
     f = MemoryStream(IOMode="write")
     LoadedData.Serialize(f)
-    return [f.Data, GpuData, b""]
+    return [f.Data, b"", b""]
 
 def AddMaterialToBlend(ID, StingrayMat, EmptyMatExists=False):
     try:
@@ -1379,8 +1389,8 @@ def CreateAddonMaterial(ID, StingrayMat, mat, Entry):
         elif node.type == 'OUTPUT_MATERIAL':
              mat.node_tree.links.new(group.outputs['Surface'], node.inputs['Surface'])
     
-    inputNode = nodeTree.nodes.get('Group Input')
-    outputNode = nodeTree.nodes.get('Group Output')
+    inputNode = group_input
+    outputNode = group_output
     bsdf = nodeTree.nodes.new('ShaderNodeBsdfPrincipled')
     bsdf.location = (50, 0)
     separateColor = nodeTree.nodes.new('ShaderNodeSeparateColor')
@@ -1400,7 +1410,6 @@ def CreateAddonMaterial(ID, StingrayMat, mat, Entry):
     elif Entry.MaterialTemplate == "original": SetupOriginalBlenderMaterial(nodeTree, inputNode, outputNode, bsdf, separateColor, normalMap)
     elif Entry.MaterialTemplate == "emissive": SetupEmissiveBlenderMaterial(nodeTree, inputNode, outputNode, bsdf, separateColor, normalMap)
     elif Entry.MaterialTemplate == "alphaclip": SetupAlphaClipBlenderMaterial(nodeTree, inputNode, outputNode, bsdf, separateColor, normalMap, mat)
-    elif Entry.MaterialTemplate == "alphaclip+": SetupAlphaClipPlusBlenderMaterial(nodeTree, inputNode, outputNode, bsdf, separateColor, normalMap, mat)
     elif Entry.MaterialTemplate == "advanced": SetupAdvancedBlenderMaterial(nodeTree, inputNode, outputNode, bsdf, separateColor, normalMap, TextureNodes, group, mat)
     elif Entry.MaterialTemplate == "translucent": SetupTranslucentBlenderMaterial(nodeTree, inputNode, outputNode, bsdf, separateColor, normalMap, mat)
     
@@ -1448,11 +1457,6 @@ def SetupAlphaClipBlenderMaterial(nodeTree, inputNode, outputNode, bsdf, separat
     nodeTree.links.new(combineColor.outputs['Color'], normalMap.inputs['Color'])
     nodeTree.links.new(normalMap.outputs['Normal'], bsdf.inputs['Normal'])
     nodeTree.links.new(bsdf.outputs['BSDF'], outputNode.inputs['Surface'])
-
-def SetupAlphaClipPlusBlenderMaterial(nodeTree, inputNode, outputNode, bsdf, separateColor, normalMap, mat):
-    SetupAlphaClipBlenderMaterial(nodeTree, inputNode, outputNode, bsdf, separateColor, normalMap, mat)
-    bsdf.inputs['Emission Strength'].default_value = 1
-    nodeTree.links.new(inputNode.outputs['Emission'], bsdf.inputs['Emission Color'])
 
 def SetupNormalMapTemplate(nodeTree, inputNode, normalMap, bsdf):
     separateColorNormal = nodeTree.nodes.new('ShaderNodeSeparateColor')
@@ -1688,6 +1692,11 @@ def SaveStingrayDump(self, ID, TocData, GpuData, StreamData, LoadedData):
     return [TocData, GpuData, StreamData]
 
 def LoadStingrayUnit(ID, TocData, GpuData, StreamData, Reload, MakeBlendObject, LoadMaterialSlotNames=False):
+    # Check if data buffers are empty
+    if len(TocData) == 0:
+        PrettyPrint(f"Skipping load of unit {ID} due to empty TocData buffer", "warn")
+        return None
+        
     toc  = MemoryStream(TocData)
     gpu  = MemoryStream(GpuData)
         
@@ -1695,7 +1704,11 @@ def LoadStingrayUnit(ID, TocData, GpuData, StreamData, Reload, MakeBlendObject, 
     StingrayMesh = StingrayMeshFile()
     StingrayMesh.NameHash = int(ID)
     StingrayMesh.LoadMaterialSlotNames = LoadMaterialSlotNames
-    StingrayMesh.Serialize(toc, gpu, Global_TocManager)
+    try:
+        StingrayMesh.Serialize(toc, gpu, Global_TocManager)
+    except Exception as e:
+        PrettyPrint(f"Failed to serialize unit {ID}: {e}", "error")
+        return None
     bones_entry = Global_TocManager.GetEntry(StingrayMesh.BonesRef, BoneID, SearchAll=True, IgnorePatch=False)
     if bones_entry and not bones_entry.IsLoaded:
         bones_entry.Load(False, False)
@@ -1927,16 +1940,16 @@ class ChangeSearchpathOperator(Operator, ImportHelper):
         return{'FINISHED'}
 
 class ChangeTempdirOperator(Operator, ImportHelper):
-    bl_label = "Change Temp Directory"
+    bl_label = "Change Tempdir"
     bl_idname = "helldiver2.change_tempdir"
-    bl_description = "Change the temporary directory for texture processing"
+    bl_description = "Change the temporary directory for texture conversion"
     use_filter_folder = True
 
     filter_glob: StringProperty(options={'HIDDEN'}, default='')
 
     def __init__(self):
         global Global_tempdir
-        self.filepath = bpy.path.abspath(Global_tempdir)
+        self.filepath = bpy.path.abspath(Global_tempdir) if Global_tempdir else tempfile.gettempdir()
         
     def execute(self, context):
         global Global_tempdir
@@ -2478,30 +2491,29 @@ class DuplicateEntryOperator(Operator):
     bl_idname = "helldiver2.archive_duplicate"
     bl_description = "Duplicate Selected Entry"
 
+    NewFileID : StringProperty(name="NewFileID", default="")
     def draw(self, context):
+        global Global_randomID
+        PrettyPrint(f"Got ID: {Global_randomID}")
+        self.NewFileID = Global_randomID
         layout = self.layout; row = layout.row()
         row.operator("helldiver2.generate_random_id", icon="FILE_REFRESH")
         row = layout.row()
-        row.prop(context.scene, "new_id_entry", icon="FILE_REFRESH")
+        row.prop(self, "NewFileID", icon='COPY_ID')
 
     object_id: StringProperty()
     object_typeid: StringProperty()
     def execute(self, context):
+        global Global_randomID
         if Global_TocManager.ActivePatch == None:
-            context.scene.new_id_entry = ""
+            Global_randomID = ""
             self.report({'ERROR'}, "No Patches Currently Loaded")
             return {'CANCELLED'}
-        if context.scene.new_id_entry == "":
+        if self.NewFileID == "":
             self.report({'ERROR'}, "No ID was given")
             return {'CANCELLED'}
-        Global_TocManager.DuplicateEntry(int(self.object_id), int(self.object_typeid), int(context.scene.new_id_entry))
-        if int(self.object_typeid) == MaterialID:
-            material = bpy.data.materials.get(self.object_id)
-            new_material = bpy.data.materials.get(context.scene.new_id_entry)
-            if material and not new_material:
-                dup = material.copy()
-                dup.name = context.scene.new_id_entry
-        context.scene.new_id_entry = ""
+        Global_TocManager.DuplicateEntry(int(self.object_id), int(self.object_typeid), int(self.NewFileID))
+        Global_randomID = ""
         return{'FINISHED'}
 
     def invoke(self, context, event):
@@ -2514,8 +2526,9 @@ class GenerateEntryIDOperator(Operator):
     bl_description = "Generates a random ID for the entry"
 
     def execute(self, context):
-        context.scene.new_id_entry = str(RandomHash16())
-        PrettyPrint(f"Generated random ID: {context.scene.new_id_entry}")
+        global Global_randomID
+        Global_randomID = str(RandomHash16())
+        PrettyPrint(f"Generated random ID: {Global_randomID}")
         return{'FINISHED'}
 
 class RenamePatchEntryOperator(Operator):
@@ -2544,16 +2557,8 @@ class RenamePatchEntryOperator(Operator):
         if self.material_id != "" and self.texture_index != "":
             MaterialEntry = Global_TocManager.GetPatchEntry_B(int(self.material_id), int(MaterialID))
             MaterialEntry.LoadedData.TexIDs[int(self.texture_index)] = int(self.NewFileID)
-            
-            
-        # Are we renaming a material? (duplicate Blender material if it exists and give it the new name)
-        if int(self.object_typeid) == MaterialID:
-            material = bpy.data.materials.get(self.object_id)
-            if material:
-                material.name = self.NewFileID
 
         # Redraw
-        LoadEntryLists()
         for area in context.screen.areas:
             if area.type == "VIEW_3D": area.tag_redraw()
             
@@ -2724,7 +2729,18 @@ class SaveStingrayUnitOperator(Operator):
         if UnitNotValidToSave(self):
             return {'CANCELLED'}
         object = None
-        object = bpy.context.active_object
+        # First try to find object by object_id if provided
+        if self.object_id:
+            for obj in bpy.context.scene.objects:
+                try:
+                    if obj["Z_ObjectID"] == self.object_id:
+                        object = obj
+                        break
+                except:
+                    pass
+        # If no object found by ID, try active object
+        if object is None:
+            object = bpy.context.active_object
         if object == None:
             self.report({"ERROR"}, "No Object selected. Please select the object to be saved.")
             return {'CANCELLED'}
@@ -2928,15 +2944,11 @@ def SaveMeshMaterials(objects):
             continue
 
         nodeName = ""
-        if material.node_tree:
-            for node in material.node_tree.nodes:
-                if node.type == 'GROUP':
-                    nodeName = node.node_tree.name
-                    PrettyPrint(f"ID: {ID} Group: {nodeName}")
-                    break
-        else:
-            PrettyPrint(f"Material {ID} has no node tree, skipping")
-            continue
+        for node in material.node_tree.nodes:
+            if node.type == 'GROUP':
+                nodeName = node.node_tree.name
+                PrettyPrint(f"ID: {ID} Group: {nodeName}")
+                break
 
         if nodeName == "" and not bpy.context.scene.Hd2ToolPanelSettings.SaveNonSDKMaterials:
             PrettyPrint(f"Cancelling Saving Material: {ID}")
@@ -3042,7 +3054,7 @@ class ExportTexturePNGOperator(Operator, ExportHelper):
         Global_TocManager.Load(int(self.object_id), TexID)
         Entry = Global_TocManager.GetEntry(int(self.object_id), TexID)
         if Entry != None:
-            tempdir = GetTempDir()
+            tempdir = tempfile.gettempdir()
             for i in range(Entry.LoadedData.ArraySize):
                 filename = os.path.basename(self.filepath)
                 directory = self.filepath.replace(filename, "")
@@ -3110,7 +3122,7 @@ class BatchExportTexturePNGOperator(Operator):
             Global_TocManager.Load(EntryID, TexID)
             Entry = Global_TocManager.GetEntry(EntryID, TexID)
             if Entry != None:
-                tempdir = GetTempDir()
+                tempdir = tempfile.gettempdir()
                 dds_path = f"{tempdir}/{EntryID}.dds"
                 with open(dds_path, 'w+b') as f:
                     f.write(Entry.LoadedData.ToDDS())
@@ -3176,7 +3188,7 @@ def SaveImagePNG(filepath, object_id):
             # get texture data
             Entry.Load()
             StingrayTex = Entry.LoadedData
-            tempdir = GetTempDir()
+            tempdir = tempfile.gettempdir()
             PrettyPrint(filepath)
             PrettyPrint(StingrayTex.Format)
             subprocess.run([Global_texconvpath, "-y", "-o", tempdir, "-ft", "dds", "-dx10", "-f", StingrayTex.Format, "-sepalpha", "-alpha", filepath], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -3426,18 +3438,19 @@ class SaveStingrayAnimationOperator(Operator):
         if not animation_entry.IsLoaded: animation_entry.Load(True, False)
         bones_entry = Global_TocManager.GetEntry(int(bones_id), BoneID, SearchAll=True, IgnorePatch=False)
         bones_data = bones_entry.TocData
-        if not Global_TocManager.IsInPatch(animation_entry):
-            animation_entry = Global_TocManager.AddEntryToPatch(int(entry_id), AnimationID)
-        else:
-            Global_TocManager.RemoveEntryFromPatch(int(entry_id), AnimationID)
-            animation_entry = Global_TocManager.AddEntryToPatch(int(entry_id), AnimationID)
         try:
             animation_entry.LoadedData.load_from_armature(context, object, bones_data)
         except AnimationException as e:
             self.report({'ERROR'}, str(e))
             return {'CANCELLED'}
         wasSaved = animation_entry.Save()
-        if not wasSaved:
+        if wasSaved:
+            if not Global_TocManager.IsInPatch(animation_entry):
+                animation_entry = Global_TocManager.AddEntryToPatch(int(entry_id), AnimationID)
+            else:
+                Global_TocManager.RemoveEntryFromPatch(int(entry_id), AnimationID)
+                animation_entry = Global_TocManager.AddEntryToPatch(int(entry_id), AnimationID)
+        else:
             self.report({"ERROR"}, f"Failed to save animation for armature {bpy.context.selected_objects[0].name}.")
             return{'CANCELLED'}
         self.report({'INFO'}, f"Saved Animation")
@@ -4101,25 +4114,19 @@ class AddLightOperator(Operator):
             return {"FINISHED"}
         bone = bpy.context.active_bone
         armature = bpy.context.active_object
-        light_name = f"Light_{r.randint(1, 0xffffffff)}"
-        
-        blend_light = bpy.data.lights.new(name = light_name, type="SPOT")
-        blend_light.use_custom_distance = True
-        blend_light.cutoff_distance = 50.0
-        blend_light.energy = 1000.0
-        blend_light.show_cone = True
-        blend_light['Volumetric'] = False
-        
-        light_object = bpy.data.objects.new(name = light_name, object_data = blend_light)
-        light_object.lock_rotation = (True, True, True)
-        light_object.lock_location = (True, True, True)
-        light_object.lock_scale = (True, True, True)
-        light_object.parent = armature
-        light_object.parent_type = 'BONE'
-        light_object.parent_bone = bone.name
-        light_object.matrix_parent_inverse = light_object.matrix_parent_inverse.inverted() @ mathutils.Matrix.Rotation(1.57079632679, 4, 'X')
-        
-        bpy.context.collection.objects.link(light_object)
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.light_add(type="SPOT", rotation=(1.5708, 0, 0))
+        light = bpy.context.active_object
+        light.parent = armature
+        light.parent_type = 'BONE'
+        light.parent_bone = bone.name
+        light.lock_rotation = (True, True, True)
+        light.lock_location = (True, True, True)
+        light.lock_scale = (True, True, True)
+        light.data.use_custom_distance = True
+        light.data.cutoff_distance = 50.0
+        light.data.energy = 1000.0
+        light.data.show_cone = True
         return {"FINISHED"}
 
 class CopyArchiveIDOperator(Operator):
@@ -4216,11 +4223,6 @@ def LoadEntryLists():
                 continue
             for entry_id in sorted(archive.TocDict[entry_type].keys()):
                 Entry = archive.TocDict[entry_type][entry_id]
-                if patch:
-                    try:
-                        Entry = patch.TocDict[entry_type][entry_id]
-                    except KeyError:
-                        pass
                 new_item = l.add()
                 new_item.item_name = str(Entry.FileID)
                 new_item.item_type = str(Entry.TypeID)
@@ -4261,8 +4263,6 @@ def LoadEntryLists():
                     new_item.item_filter_name = new_item.item_name
     if state_machine_warning:
         PrettyPrint("State machine not loaded for all animations; filtering animations by armature may not work.", "warn")
-        
-    ChangeSearchString(bpy.context.scene.Hd2ToolPanelSettings, bpy.context)
 
 def LoadedArchives_callback(scene, context):
     return [(Archive.Name, GetArchiveNameFromID(Archive.Name) if GetArchiveNameFromID(Archive.Name) != "" else Archive.Name, Archive.Name) for Archive in Global_TocManager.LoadedArchives]
@@ -4280,19 +4280,10 @@ def ChangePatchOnly(self, context):
     LoadEntryLists()
     
 def ChangeSearchString(self, context):
+    print(self)
+    print(context)
     for t in Global_TypeIDs:
         setattr(bpy.context.scene, f"filter_{t}", self.SearchField)
-        list_data = getattr(bpy.context.scene, f"list_{t}")
-        filter_string = self.SearchField
-        if filter_string.startswith("0x"):
-            filter_string = str(hex_to_decimal(filter_string))
-        flt_flags = bpy.types.UI_UL_list.filter_items_by_name(filter_string, 1073741824, list_data, "item_filter_name")
-        if not flt_flags:
-            flt_flags = [1] * len(list_data)
-        #flt_neworder = bpy.types.UI_UL_list.sort_items_by_name(data, "item_name")
-        for item in list_data:
-            item.item_visible = not all([flag == 0 for flag in flt_flags])
-            break
 
 class Hd2ToolPanelSettings(PropertyGroup):
     # Patches
@@ -4375,12 +4366,6 @@ class ListItem(PropertyGroup):
         name="Selected",
         description="Indicates if item is selected",
         default=False
-    )
-    
-    item_visible: BoolProperty(
-        name="Visible",
-        description="Indicates if item is visible in list",
-        default=True
     )
     
 class RagdollProperty(PropertyGroup):
@@ -4511,6 +4496,7 @@ class MY_UL_List(UIList):
         if not flt_flags:
             flt_flags = [self.bitflag_filter_item] * len(list_data)
         #flt_neworder = bpy.types.UI_UL_list.sort_items_by_name(data, "item_name")
+        
         return flt_flags, flt_neworder
 
 class HellDivers2ToolsPanel(Panel):
@@ -4694,12 +4680,8 @@ class HellDivers2ToolsPanel(Panel):
             row = settings_box.row()
             row.label(text=Global_gamepath)
             row.operator("helldiver2.change_filepath", icon='FILEBROWSER')
-            settings_box.separator()
-            
             row = settings_box.row()
-            row.label(text="Temp Directory:")
-            row = settings_box.row()
-            row.label(text=Global_tempdir if Global_tempdir else "System Default")
+            row.label(text=Global_tempdir if Global_tempdir else tempfile.gettempdir())
             row.operator("helldiver2.change_tempdir", icon='FILEBROWSER')
             settings_box.separator()
 
@@ -4795,17 +4777,6 @@ class HellDivers2ToolsPanel(Panel):
         row.prop(scene.Hd2ToolPanelSettings, "SearchField", icon='VIEWZOOM', text="")
         global Global_Foldouts
         for Type in sorted(DisplayTocTypes, key=lambda e: e.TypeID):
-            # Skip if TypeID is 0 or not in Global_TypeIDs
-            if Type.TypeID == 0:
-                continue
-            try:
-                ui_list = getattr(scene, f"list_{Type.TypeID}")
-            except AttributeError:
-                continue
-            if len(ui_list) == 0:
-                continue
-            if not ui_list[0].item_visible:
-                continue
             if Global_Foldouts.get(str(Type.TypeID), None) is None: # move to only init these keys once
                 fold = Type.TypeID in [MaterialID, TexID, UnitID]
                 Global_Foldouts[str(Type.TypeID)] = fold
@@ -5244,6 +5215,7 @@ classes = (
     UnloadPatchesOperator,
     GithubOperator,
     ChangeFilepathOperator,
+    ChangeTempdirOperator,
     CopyCustomPropertyOperator,
     PasteCustomPropertyOperator,
     CopyArchiveIDOperator,
@@ -5255,7 +5227,6 @@ classes = (
     SaveTextureFromPNGOperator,
     SearchByEntryIDOperator,
     ChangeSearchpathOperator,
-    ChangeTempdirOperator,
     ExportTexturePNGOperator,
     BatchExportTexturePNGOperator,
     CopyDecimalIDOperator,
@@ -5313,6 +5284,12 @@ def register():
     bpy.utils.register_class(WM_MT_button_context)
     bpy.types.VIEW3D_MT_object_context_menu.append(CustomPropertyContext)
     bpy.types.VIEW3D_MT_armature_context_menu.append(CustomBoneContext)
+    #bpy.types.VIEW3D_MT_pose_context_menu
+    #bpy.types.VIEW3D_MT_armature_context_menu
+    #bpy.types.VIEW3D_MT_
+    #for name in dir(bpy.types):
+    #    if "context" in name:
+    #        print(name)
     bpy.utils.register_class(MY_UL_List)
     bpy.utils.register_class(ListItem)
     for t in Global_TypeIDs: # make all this into an item in another collection property
@@ -5320,7 +5297,6 @@ def register():
         setattr(bpy.types.Scene, f"index_{t}", IntProperty(name = f"index_{t}", default = 0))
         setattr(bpy.types.Scene, f"filter_{t}", StringProperty(name = f"filter_{t}", default = ""))
         setattr(bpy.types.Scene, f"index_{t}_dummy", IntProperty(name = f"index_{t}_dummy", default = 5000000, set=SetSelected(t)))
-    bpy.types.Scene.new_id_entry = StringProperty(name="new_id_entry", default="")
 
 def unregister():
     bpy.utils.unregister_class(WM_MT_button_context)

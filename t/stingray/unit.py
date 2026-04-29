@@ -183,14 +183,11 @@ class StingrayMeshFile:
         # Get Customization Info
         UnreversedCustomizationData_Size = 0
         if self.CustomizationInfoOffset > 0:
-            if f.IsReading():
-                f.seek(self.CustomizationInfoOffset)
-            else:
-                self.CustomizationInfoOffset = f.tell()
+            self.CustomizationInfoOffset = f.tell()
             if f.IsReading():
                 if self.UnkHeaderOffset1 > 0:
                     UnreversedCustomizationData_Size = self.UnkHeaderOffset1 - f.tell()
-                elif self.ConnectingBoneHashOffset > 0:
+                if self.ConnectingBoneHashOffset > 0:
                     UnreversedCustomizationData_Size = self.ConnectingBoneHashOffset - f.tell()
                 elif self.BoneInfoOffset > 0:
                     UnreversedCustomizationData_Size = self.BoneInfoOffset-f.tell()
@@ -207,10 +204,7 @@ class StingrayMeshFile:
         # If there is no transform info, this data is already contained in UnreversedLODGroupListData
         if self.UnkHeaderOffset1 > 0:
             data_size = 0
-            if f.IsReading():
-                f.seek(self.UnkHeaderOffset1)
-            else:
-                self.UnkHeaderOffset1 = f.tell()
+            self.UnkHeaderOffset1 = f.tell()
             if f.IsReading():
                 if self.ConnectingBoneHashOffset > 0:
                     data_size = self.ConnectingBoneHashOffset - f.tell()
@@ -596,13 +590,11 @@ class StingrayMeshFile:
             HasTangents  = False
             HasBiTangents= False
             IsSkinned    = False
-            HasColors    = False
             NumUVs       = 0
             NumBoneIndices = 0
             # get total number of components
             for mesh in OrderedMeshes[stream_idx][0]:
                 if len(mesh.VertexPositions)  > 0: HasPositions  = True
-                if len(mesh.VertexColors)     > 0: HasColors     = True
                 if len(mesh.VertexNormals)    > 0: HasNormals    = True
                 if len(mesh.VertexTangents)   > 0: HasTangents   = True
                 if len(mesh.VertexBiTangents) > 0: HasBiTangents = True
@@ -614,20 +606,19 @@ class StingrayMeshFile:
                     NumUVs = max(3, NumUVs)
                 if IsSkinned and NumBoneIndices > 1 and BlenderOpts.get("Force1Group"):
                     NumBoneIndices = 1
+
             for mesh in OrderedMeshes[stream_idx][0]: # fill default values for meshes which are missing some components
                 if not len(mesh.VertexPositions)  > 0:
                     raise Exception("bruh... your mesh doesn't have any vertices")
                 if HasNormals and not len(mesh.VertexNormals)    > 0:
                     mesh.VertexNormals = [[0,0,0] for n in mesh.VertexPositions]
-                if HasColors and not len(mesh.VertexColors) > 0:
-                    mesh.VertexColors = [[0, 0, 0, 0] for n in mesh.VertexColors]
                 if HasTangents and not len(mesh.VertexTangents)   > 0:
                     mesh.VertexTangents = [[0,0,0] for n in mesh.VertexPositions]
                 if HasBiTangents and not len(mesh.VertexBiTangents) > 0:
                     mesh.VertexBiTangents = [[0,0,0] for n in mesh.VertexPositions]
                 if IsSkinned and not len(mesh.VertexWeights) > 0:
                     mesh.VertexWeights      = [[0,0,0,0] for n in mesh.VertexPositions]
-                    mesh.VertexBoneIndices  = [[[0,0,0,0] for n in mesh.VertexPositions] for _ in range(NumBoneIndices)]
+                    mesh.VertexBoneIndices  = [[[0,0,0,0] for n in mesh.VertexPositions]*NumBoneIndices]
                 if IsSkinned and len(mesh.VertexBoneIndices) > NumBoneIndices:
                     mesh.VertexBoneIndices = mesh.VertexBoneIndices[::NumBoneIndices]
                 if NumUVs > len(mesh.VertexUVs):
@@ -636,7 +627,6 @@ class StingrayMeshFile:
                         mesh.VertexUVs.append([[0,0] for n in mesh.VertexPositions])
             # make stream components
             Stream_Info.Components = []
-            if HasColors:     Stream_Info.Components.append(StreamComponentInfo("color", "rgba_r8g8b8a8"))
             if HasPositions:  Stream_Info.Components.append(StreamComponentInfo("position", "vec3_float"))
             if HasNormals:    Stream_Info.Components.append(StreamComponentInfo("normal", "unk_normal"))
             for n in range(NumUVs):
@@ -1205,7 +1195,6 @@ class Light:
     CAST_SHADOW = 0x1
     DISABLED = 0x2
     INDIRECT_LIGHTING = 0x4
-    VOLUMETRIC_FOG = 0x10
 
     def __init__(self):
         self.name_hash = self.bone_index = self.falloff_start = self.falloff_end = self.start_angle = self.end_angle = self.unk0 = self.flags = self.light_type = 0
@@ -1298,14 +1287,9 @@ class SerializeFunctions:
     
     def SerializeBoneIndexComponent(gpu, mesh, component, vidx):
         try:
-            # Ensure component Index is within bounds
-            if component.Index < len(mesh.VertexBoneIndices):
-                mesh.VertexBoneIndices[component.Index][vidx] = component.SerializeComponent(gpu, mesh.VertexBoneIndices[component.Index][vidx])
-            else:
-                # If Index is out of bounds, skip this component
-                gpu.seek(gpu.tell() + component.GetSize())
-        except Exception as e:
-            raise BoneIndexException(f"Vertex bone index out of range. Component index: {component.Index} vidx: {vidx} Error: {str(e)}")
+             mesh.VertexBoneIndices[component.Index][vidx] = component.SerializeComponent(gpu, mesh.VertexBoneIndices[component.Index][vidx])
+        except:
+            raise BoneIndexException(f"Vertex bone index out of range. Component index: {component.Index} vidx: {vidx}")
     
     def SerializeBoneWeightComponent(gpu, mesh, component, vidx):
         if component.Index > 0: # TODO: add support for this (check archive 9102938b4b2aef9d)
@@ -1326,17 +1310,17 @@ class SerializeFunctions:
         
     def SerializeRGBA8888Component(f: MemoryStream, value):
         if f.IsReading():
-            value = f.vec4_uint8([0,0,0,0])
-            value[0] = min(1, float(value[0]/255))
-            value[1] = min(1, float(value[1]/255))
-            value[2] = min(1, float(value[2]/255))
-            value[3] = min(1, float(value[3]/255))
-        else:
             r = min(255, int(value[0]*255))
             g = min(255, int(value[1]*255))
             b = min(255, int(value[2]*255))
             a = min(255, int(value[3]*255))
             value = f.vec4_uint8([r,g,b,a])
+        else:
+            value = f.vec4_uint8([r,g,b,a])
+            value[0] = min(1, float(value[0]/255))
+            value[1] = min(1, float(value[1]/255))
+            value[2] = min(1, float(value[2]/255))
+            value[3] = min(1, float(value[3]/255))
         return value
         
     def SerializeVec4Uint32Component(f: MemoryStream, value):
@@ -1463,15 +1447,15 @@ def PrepareMesh(og_object):
     object = duplicate(og_object)
     bpy.ops.object.select_all(action='DESELECT')
     bpy.context.view_layer.objects.active = object
-    mesh = object.data
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.reveal()
     
     if bpy.context.scene.Hd2ToolPanelSettings.SplitUVIslands:
         # merge by distance
+        bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action="SELECT")
         bpy.ops.mesh.remove_doubles(use_unselected=False, use_sharp_edge_from_normals=True)
-
+        
+    mesh = object.data
+    bpy.ops.object.mode_set(mode='EDIT')
     for uv_layer in mesh.uv_layers:
         mesh.uv_layers.active = uv_layer
         try:
@@ -1571,8 +1555,8 @@ def GetMeshData(og_object, Global_TocManager, Global_BoneNames):
     #normals = NormalsFromPalette(normals)
     # get uvs
     for uvlayer in object.data.uv_layers:
-        #if len(uvs) >= 3:
-        #    break
+        if len(uvs) >= 3:
+            break
         texCoord = [[0,0] for vert in mesh.vertices]
         for face in object.data.polygons:
             for vert_idx, loop_idx in zip(face.vertices, face.loop_indices):
@@ -1595,18 +1579,19 @@ def GetMeshData(og_object, Global_TocManager, Global_BoneNames):
     transform_info = stingray_mesh_entry.TransformInfo
     light_list = stingray_mesh_entry.LightList
     lod_index = og_object["BoneInfoIndex"]
-    bone_entry = Global_TocManager.GetEntry(stingray_mesh_entry.BonesRef, BoneID, IgnorePatch=False, SearchAll=True)
+    bone_entry = Global_TocManager.GetEntryByLoadArchive(stingray_mesh_entry.BonesRef, BoneID)
     modified_bone_entry = False
     modified_state_machine = False
     bone_names = []
     bone_data = None
     state_machine_data = None
-    state_machine_entry = Global_TocManager.GetEntry(stingray_mesh_entry.StateMachineRef, StateMachineID, IgnorePatch=False, SearchAll=True)
+    state_machine_entry = Global_TocManager.GetEntryByLoadArchive(stingray_mesh_entry.StateMachineRef, StateMachineID)
     if bone_entry is None:
         PrettyPrint("This unit does not have any animated bone data, unable to edit bone animated state", "warn")
     else:
-        if not Global_TocManager.IsInPatch(bone_entry):
-            bone_entry = Global_TocManager.AddEntryToPatch(bone_entry.FileID, BoneID)
+        if Global_TocManager.IsInPatch(bone_entry):
+            Global_TocManager.RemoveEntryFromPatch(bone_entry.FileID, BoneID)
+        bone_entry = Global_TocManager.AddEntryToPatch(bone_entry.FileID, BoneID)
         if bone_entry:
             if not bone_entry.IsLoaded:
                 bone_entry.Load()
@@ -1614,8 +1599,9 @@ def GetMeshData(og_object, Global_TocManager, Global_BoneNames):
     if state_machine_entry is None:
         PrettyPrint("This unit does not have any state machine data, unable to edit bone animated state", "warn")
     else:
-        if not Global_TocManager.IsInPatch(state_machine_entry):
-            state_machine_entry = Global_TocManager.AddEntryToPatch(state_machine_entry.FileID, StateMachineID)
+        if Global_TocManager.IsInPatch(state_machine_entry):
+            Global_TocManager.RemoveEntryFromPatch(state_machine_entry.FileID, StateMachineID)
+        state_machine_entry = Global_TocManager.AddEntryToPatch(state_machine_entry.FileID, StateMachineID)
         if state_machine_entry:
             if not state_machine_entry.IsLoaded:
                 state_machine_entry.Load()
@@ -1637,22 +1623,7 @@ def GetMeshData(og_object, Global_TocManager, Global_BoneNames):
         armature_obj.hide_set(False)
         bpy.context.view_layer.objects.active = armature_obj
         bpy.ops.object.mode_set(mode='EDIT')
-        
-        # check if animated bones list has changed, and if it has, clear all modded animations for this armature
-        # but keep them in the patch
-        if bone_data:
-            old_bones = sorted(bone_data.BoneHashes)
-            new_bones = sorted([(int(bone.name) if bone.name.isdigit() else murmur32_hash(bone.name.encode("utf-8"))) for bone in armature_obj.data.edit_bones if bone.get('Animated')])
-            if old_bones != new_bones:
-                PrettyPrint("Changes made to animated bones, clearing saved animation data")
-                if state_machine_data:
-                    for animation in state_machine_data.animation_ids:
-                        animation_data = Global_TocManager.GetEntry(animation, AnimationID, IgnorePatch=False, SearchAll=True)
-                        if Global_TocManager.IsInPatch(animation_data):
-                            Global_TocManager.RemoveEntryFromPatch(animation, AnimationID)
-                        Global_TocManager.AddEntryToPatch(animation, AnimationID)
-        
-        for bone in armature_obj.data.edit_bones:
+        for bone in armature_obj.data.edit_bones: # I'd like to use edit bones but it doesn't work for some reason
             try:
                 name_hash = int(bone.name)
             except ValueError:
@@ -1688,9 +1659,12 @@ def GetMeshData(og_object, Global_TocManager, Global_BoneNames):
                             animation_data = Global_TocManager.GetEntry(animation, AnimationID, IgnorePatch=False, SearchAll=True)
                             if not animation_data.IsLoaded:
                                 animation_data.Load(False, False)
-                            animation_data.LoadedData.add_bone(bone)
+                            animation_data.LoadedData.add_bone()
+                            if Global_TocManager.IsInPatch(animation_data):
+                                Global_TocManager.RemoveEntryFromPatch(animation, AnimationID)
+                            Global_TocManager.AddEntryToPatch(animation, AnimationID)
                             Global_TocManager.Save(animation, AnimationID)
-                if not animated and name_hash in bone_data.BoneHashes:
+                if not animated and name_hash in bone_data.BoneHashes: # this WILL require redoing all animations
                     list_index = bone_data.BoneHashes.index(name_hash)
                     bone_data.BoneHashes.pop(list_index)
                     bone_data.Names.pop(list_index)
@@ -1698,20 +1672,17 @@ def GetMeshData(og_object, Global_TocManager, Global_BoneNames):
                     modified_bone_entry = True
                     modified_state_machine = True
                     for blend_mask in state_machine_data.blend_masks:
-                        try:
-                            blend_mask.bone_weights.pop(list_index)
-                            blend_mask.bone_count -= 1
-                        except IndexError: # happens when removing a custom animated bone
-                            pass
+                        blend_mask.bone_count -= 1
+                        blend_mask.bone_weights.pop(list_index)
                     if state_machine_data:
                         for animation in state_machine_data.animation_ids:
                             animation_data = Global_TocManager.GetEntry(animation, AnimationID, IgnorePatch=False, SearchAll=True)
                             if not animation_data.IsLoaded:
                                 animation_data.Load(False, False)
-                            try:
-                                animation_data.LoadedData.remove_bone(list_index)
-                            except IndexError: # happens when removing a custom animated bone
-                                pass
+                            animation_data.LoadedData.remove_bone(list_index)
+                            if Global_TocManager.IsInPatch(animation_data):
+                                Global_TocManager.RemoveEntryFromPatch(animation, AnimationID)
+                            Global_TocManager.AddEntryToPatch(animation, AnimationID)
                             Global_TocManager.Save(animation, AnimationID)
                     else:
                         raise Exception("No state machine property on armature, unable to automatically remove bone data from animations; please set a valid StateMachineID property.")
@@ -1797,10 +1768,10 @@ def GetMeshData(og_object, Global_TocManager, Global_BoneNames):
         bpy.context.view_layer.objects.active = prev_obj
         bpy.ops.object.mode_set(mode=prev_mode)
         
-    if modified_bone_entry and bone_entry:
+    if modified_bone_entry:
         bone_entry.Save()
         
-    if modified_state_machine and state_machine_entry:
+    if modified_state_machine:
         state_machine_entry.Save()
     
     # get lights
@@ -1859,15 +1830,9 @@ def GetMeshData(og_object, Global_TocManager, Global_BoneNames):
                 target_light.end_angle = math.pi
             color = blend_light_data.color
             intensity = blend_light_data.energy
-            target_light.flags = target_light.flags & 0b11101110
+            target_light.flags = 0
             if blend_light_data.use_shadow:
                 target_light.flags |= Light.CAST_SHADOW
-            try:
-                if blend_light_data['Volumetric']:
-                    target_light.flags |= Light.VOLUMETRIC_FOG
-            except Exception as e:
-                print(e)
-                    
             target_light.color = [color.r * intensity, color.g*intensity, color.b*intensity]
             if new_light:
                 light_list.lights.append(target_light)
@@ -1954,6 +1919,13 @@ def GetMeshData(og_object, Global_TocManager, Global_BoneNames):
     # and also relative to the mesh transform
     if lod_index != -1:
         mesh_info_index = og_object["MeshInfoIndex"]
+        
+        # Check if mesh_info_index is valid
+        if mesh_info_index < 0 or mesh_info_index >= len(stingray_mesh_entry.MeshInfoArray):
+            PrettyPrint(f"Warning: Invalid MeshInfoIndex {mesh_info_index} for object {og_object.name}. Valid range: 0-{len(stingray_mesh_entry.MeshInfoArray)-1}", "warn")
+            # Use default index if invalid
+            mesh_info_index = 0
+        
         mesh_info = stingray_mesh_entry.MeshInfoArray[mesh_info_index]
         origin_transform_matrix = transform_info.TransformMatrices[mesh_info.TransformIndex].ToBlenderMatrix().inverted()
         for i, transform_index in enumerate(bone_info[lod_index].RealIndices):
@@ -1987,7 +1959,15 @@ def GetMeshData(og_object, Global_TocManager, Global_BoneNames):
     NewMesh.VertexBoneIndices   = boneIndices
     NewMesh.Indices             = faces
     NewMesh.Materials           = materials
-    NewMesh.MeshInfoIndex       = og_object["MeshInfoIndex"]
+    
+    # Set MeshInfoIndex with validation
+    original_mesh_info_index = og_object["MeshInfoIndex"]
+    if original_mesh_info_index < 0 or original_mesh_info_index >= len(stingray_mesh_entry.MeshInfoArray):
+        NewMesh.MeshInfoIndex = mesh_info_index  # Use the validated index
+        PrettyPrint(f"Warning: Setting MeshInfoIndex to {NewMesh.MeshInfoIndex} (original: {original_mesh_info_index}) for object {og_object.name}", "warn")
+    else:
+        NewMesh.MeshInfoIndex = original_mesh_info_index
+    
     NewMesh.DEV_BoneInfoIndex   = og_object["BoneInfoIndex"]
     NewMesh.LodIndex            = og_object["BoneInfoIndex"]
     if len(vertices) > 0xffff: NewMesh.DEV_Use32BitIndices = True
@@ -2363,7 +2343,7 @@ def CreateModel(stingray_unit, id, Global_BoneNames, bones_entry, state_machine_
               skeletonObj.animation_data_create()
         
         
-        if skeletonObj is not None and not imported_lights:
+        if not imported_lights:
             imported_lights = True
             current_mode = bpy.context.mode
             bpy.ops.object.mode_set(mode='EDIT')
@@ -2406,23 +2386,11 @@ def CreateModel(stingray_unit, id, Global_BoneNames, bones_entry, state_machine_
                     blend_light.cutoff_distance = light.falloff_end
                     #blend_light.exposure = light.falloff_exp
                     blend_light.energy = sqrt(sum([component**2 for component in light.color]))
-                else:
-                    print("UNKNOWN LIGHT TYPE")
-                    print(light.light_type)
-                    continue
                 if light.flags & Light.CAST_SHADOW:
                     blend_light.use_shadow = True
                 else:
                     blend_light.use_shadow = False
-                if light.flags & Light.VOLUMETRIC_FOG:
-                    blend_light['Volumetric'] = True
-                else:
-                    blend_light['Volumetric'] = False
-                blend_light.use_custom_distance = True
                 light_object = bpy.data.objects.new(name = str(light.name_hash), object_data = blend_light)
-                light_object.lock_rotation = (True, True, True)
-                light_object.lock_location = (True, True, True)
-                light_object.lock_scale = (True, True, True)
                 bpy.context.collection.objects.link(light_object)
                 rotation_matrix = mathutils.Matrix.Rotation(1.57079632679, 4, 'X')
                 if armature:
@@ -2455,12 +2423,11 @@ def CreateModel(stingray_unit, id, Global_BoneNames, bones_entry, state_machine_
             try:
                 new_object.data.materials.append(bpy.data.materials[material.MatID])
             except:
-                # Create an empty material if it doesn't exist
-                try:
-                    bpy.data.materials.new(material.MatID)
-                    new_object.data.materials.append(bpy.data.materials[material.MatID])
-                except:
-                    raise Exception(f"Tool was unable to find or create material that this mesh uses, ID: {material.MatID}")
+                # Create a default material if it doesn't exist
+                PrettyPrint(f"Material {material.MatID} not found, creating default material", "warn")
+                default_mat = bpy.data.materials.new(name=str(material.MatID))
+                default_mat.use_nodes = True
+                new_object.data.materials.append(default_mat)
             # assign material to faces
             numTris    = int(material.NumIndices/3)
             StartIndex = int(material.StartIndex/3)

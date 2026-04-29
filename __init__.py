@@ -1,6 +1,6 @@
 bl_info = {
     "name": "Helldivers 2 SDK: Community Edition",
-    "version": (3, 4, 0),
+    "version": (3, 7, 3),
     "blender": (4, 0, 0),
     "category": "Import-Export",
 }
@@ -116,8 +116,10 @@ Global_randomID = ""
 
 Global_latestVersionLink = "https://api.github.com/repos/Boxofbiscuits97/HD2SDK-CommunityEdition/releases/latest"
 Global_addonUpToDate = None
+Global_showChangelog = False
 
-Global_archieHashLink = "https://raw.githubusercontent.com/Boxofbiscuits97/HD2SDK-CommunityEdition/main/hashlists/archivehashes.json"
+Global_archieHashLink   = "https://raw.githubusercontent.com/Boxofbiscuits97/HD2SDK-CommunityEdition/main/hashlists/archivehashes.json"
+Global_friendlyNameLink = "https://raw.githubusercontent.com/Boxofbiscuits97/HD2SDK-CommunityEdition/main/hashlists/friendlynames.txt"
 
 Global_previousRandomHash = 0
 
@@ -272,13 +274,28 @@ def UpdateArchiveHashes():
     except requests.HTTPError as err:
         PrettyPrint(f"HTTP error occurred: {err}", "warn")
 
-def EntriesFromStrings(file_id_string, type_id_string):
+def UpdateFriendlyNames():
+    try:
+        req = requests.get(Global_friendlyNameLink)
+        req.raise_for_status()  # Check if the request is successful.
+        if req.status_code == requests.codes.ok:
+            file = open(Global_friendlynamespath, "w")
+            file.write(req.text)
+            PrettyPrint(f"Updated Friendly Names File")
+        else:
+            PrettyPrint(f"Request Failed, Could not update Friendly Names File", "warn")
+    except requests.ConnectionError:
+        PrettyPrint("Connection failed. Please check your network settings.", "warn")
+    except requests.HTTPError as err:
+        PrettyPrint(f"HTTP error occurred: {err}", "warn")
+
+def EntriesFromStrings(file_id_string, type_id_string, IgnorePatch=False):
     FileIDs = file_id_string.split(',')
     TypeIDs = type_id_string.split(',')
     Entries = []
     for n in range(len(FileIDs)):
         if FileIDs[n] != "":
-            Entries.append(Global_TocManager.GetEntry(int(FileIDs[n]), int(TypeIDs[n])))
+            Entries.append(Global_TocManager.GetEntry(int(FileIDs[n]), int(TypeIDs[n]), IgnorePatch))
     return Entries
 
 def EntriesFromString(file_id_string, TypeID):
@@ -293,8 +310,11 @@ def IDsFromString(file_id_string):
     FileIDs = file_id_string.split(',')
     Entries = []
     for n in range(len(FileIDs)):
-        if FileIDs[n] != "":
-            Entries.append(int(FileIDs[n]))
+        ID = FileIDs[n]
+        if ID.startswith("0x"):
+            ID = hex_to_decimal(ID)
+        if ID != "":
+            Entries.append(int(ID))
     return Entries
 
 def GetDisplayData():
@@ -1404,6 +1424,16 @@ def CreateAddonMaterial(ID, StingrayMat, mat, Entry):
     elif Entry.MaterialTemplate == "advanced": SetupAdvancedBlenderMaterial(nodeTree, inputNode, outputNode, bsdf, separateColor, normalMap, TextureNodes, group, mat)
     elif Entry.MaterialTemplate == "translucent": SetupTranslucentBlenderMaterial(nodeTree, inputNode, outputNode, bsdf, separateColor, normalMap, mat)
     
+    warning_label = nodeTree.nodes.new('NodeFrame')
+    warning_label.label = "BLENDER PREVIEW ONLY - ANY CHANGES WILL NOT AFFECT YOUR MOD!"
+    warning_label.location = (inputNode.location.x, inputNode.location.y + 100) 
+    warning_label.width = 1300
+    warning_label.height = 50
+    warning_label.use_custom_color = True
+    warning_label.color = (1, 0, 0)
+    warning_label.label_size = 20
+    warning_label.shrink = True
+
 def SetupBasicBlenderMaterial(nodeTree, inputNode, outputNode, bsdf, separateColor, normalMap):
     bsdf.inputs['Emission Strength'].default_value = 0
     inputNode.location = (-750, 0)
@@ -1601,7 +1631,7 @@ def BlendImageToStingrayTexture(image, StingrayTex):
     image.filepath_raw = tga_path
     image.save()
 
-    subprocess.run([Global_texconvpath, "-y", "-o", tempdir, "-ft", "dds", "-dx10", "-f", StingrayTex.Format, "-sepalpha", "-alpha", dds_path], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    subprocess.run([Global_texconvpath, "-y", "-o", tempdir, "-ft", "dds", "-dx10", "-f", StingrayTex.Format, "-sepalpha", "-alpha", "--", dds_path], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
     
     if os.path.isfile(dds_path):
         with open(dds_path, 'r+b') as f:
@@ -1626,7 +1656,7 @@ def LoadStingrayTexture(ID, TocData, GpuData, StreamData, Reload, MakeBlendObjec
         with open(dds_path, 'w+b') as f:
             f.write(dds)
         
-        subprocess.run([Global_texconvpath, "-y", "-o", tempdir, "-ft", "png", "-f", "R8G8B8A8_UNORM", "-sepalpha", "-alpha", dds_path], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        subprocess.run([Global_texconvpath, "-y", "-o", tempdir, "-ft", "png", "-f", "R8G8B8A8_UNORM", "-sepalpha", "-alpha", "--", dds_path], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
         if os.path.isfile(png_path):
             image = bpy.data.images.load(png_path)
@@ -1896,12 +1926,15 @@ class ChangeFilepathOperator(Operator, ImportHelper):
         global Global_gamepathIsValid
         filepath = self.filepath
         steamapps = "steamapps"
+        steamapps_capitalized = "SteamApps"
         if steamapps in filepath:
-            filepath = f"{filepath.partition(steamapps)[0]}steamapps/common/Helldivers 2/data/ "[:-1]
+            filepath = f"{filepath.partition(steamapps)[0]}steamapps/common/Helldivers 2/data/"
+        elif steamapps_capitalized in filepath:
+            filepath = f"{filepath.partition(steamapps_capitalized)[0]}SteamApps/common/Helldivers 2/data/"
         else:
             self.report({'ERROR'}, f"Could not find steamapps folder in filepath: {filepath}")
             return{'CANCELLED'}
-        Global_gamepath = filepath
+        Global_gamepath = filepath.replace('\\', '/')
         Global_gamepathIsValid = True
         UpdateConfig()
         PrettyPrint(f"Changed Game File Path: {Global_gamepath}")
@@ -2077,8 +2110,7 @@ class SearchByEntryIDOperator(Operator, ImportHelper):
                 ID = hex_to_decimal(ID)
             ID = int(ID)
            
-            Archives = SearchByEntryID(ID)
-            
+            Archives = SearchByEntryID([ID])
             if Archives and bpy.context.scene.Hd2ToolPanelSettings.LoadFoundArchives:
                 for Archive in Archives:
                     Global_TocManager.LoadArchive(Archive.Path, True, False)
@@ -2102,19 +2134,16 @@ class SearchByEntryIDInput(Operator):
 
     entry_id: StringProperty(name="Entry ID")
     def execute(self, context):
-            ID = self.entry_id
-            if ID.startswith("0x"):
-                ID = hex_to_decimal(self.entry_id)
+        IDs = IDsFromString(self.entry_id)
+        Archives = SearchByEntryID(IDs, bpy.context.scene.Hd2ToolPanelSettings.SearchAllInclusiveOnly)
+        for Archive in Archives:
+            Global_TocManager.LoadArchive(Archive.Path)
 
-            Archives = SearchByEntryID(int(ID))
-            for Archive in Archives:
-                Global_TocManager.LoadArchive(Archive.Path)
-
-            # Redraw
-            for area in context.screen.areas:
-                if area.type == "VIEW_3D": area.tag_redraw()
-            
-            return{'FINISHED'}
+        # Redraw
+        for area in context.screen.areas:
+            if area.type == "VIEW_3D": area.tag_redraw()
+        
+        return{'FINISHED'}
     
     def invoke(self, context, event):
         if ArchivesNotLoaded(self):
@@ -2125,16 +2154,25 @@ class SearchByEntryIDInput(Operator):
         layout = self.layout
         layout.prop(self, "entry_id")
 
-def SearchByEntryID(ID: int):
+def SearchByEntryID(IDs: list[int], includeAllInArchives=False):
     global Global_TocManager
     archives = []
-    PrettyPrint(f"Searching for ID: {ID}")
     for Archive in Global_TocManager.SearchArchives:
-        if ID in Archive.fileIDs:
-            PrettyPrint(f"Found ID: {ID} in Archive: {Archive.Name}")
-            archives.append(Archive)
-        
-    PrettyPrint(f"Found ID: {ID} in {len(archives)} unique archives")
+        if includeAllInArchives:
+            if set(IDs).issubset(set(Archive.fileIDs)):
+                PrettyPrint(f"Found all IDs: {IDs} in Archive: {Archive.Name}")
+                archives.append(Archive)
+                if bpy.context.scene.Hd2ToolPanelSettings.LoadOnlyFirstFoundArchive:
+                        break
+        else:
+            for ID in IDs:
+                if ID in Archive.fileIDs:
+                    PrettyPrint(f"Found ID: {ID} in Archive: {Archive.Name}")
+                    archives.append(Archive)
+                if bpy.context.scene.Hd2ToolPanelSettings.LoadOnlyFirstFoundArchive:
+                    break
+
+    PrettyPrint(f"Found IDs in {len(archives)} unique archives")
     PrettyPrint(archives)
     return archives
 
@@ -2458,6 +2496,11 @@ class RemoveEntryFromPatchOperator(Operator):
         for Entry in Entries:
             Global_TocManager.RemoveEntryFromPatch(Entry.FileID, Entry.TypeID)
         LoadEntryLists()
+
+        # Redraw
+        for area in context.screen.areas:
+            if area.type == "VIEW_3D": area.tag_redraw()
+
         return{'FINISHED'}
 
 class UndoArchiveEntryModOperator(Operator):
@@ -2494,6 +2537,7 @@ class DuplicateEntryOperator(Operator):
         if context.scene.new_id_entry == "":
             self.report({'ERROR'}, "No ID was given")
             return {'CANCELLED'}
+        # somehow duplicate all textures?
         Global_TocManager.DuplicateEntry(int(self.object_id), int(self.object_typeid), int(context.scene.new_id_entry))
         if int(self.object_typeid) == MaterialID:
             material = bpy.data.materials.get(self.object_id)
@@ -2501,6 +2545,24 @@ class DuplicateEntryOperator(Operator):
             if material and not new_material:
                 dup = material.copy()
                 dup.name = context.scene.new_id_entry
+                # set new ID in the shader node of the duplicated material, if it's an SDK material
+                for node in dup.node_tree.nodes:
+                    if node.type == 'GROUP':
+                        nodeName = node.node_tree.name
+                        if "-" in nodeName:
+                            if self.object_id in nodeName.split("-")[1]:
+                                node.node_tree.name = "-".join([nodeName.split("-")[0], context.scene.new_id_entry])
+                            else:
+                                PrettyPrint(f"Failed to find template from group: {nodeName}. Rename failed.", "error")
+                                dup.name = self.object_id
+                                context.scene.new_id_entry = ""
+                                return {'CANCELLED'}
+                        else: # non-SDK material
+                            PrettyPrint(f"Failed to rename material when duplicating: {self.object_id}", "error")
+                            bpy.data.materials.remove(dup)
+                            context.scene.new_id_entry = ""
+                            return {'CANCELLED'}
+                        break
         context.scene.new_id_entry = ""
         return{'FINISHED'}
 
@@ -2551,6 +2613,21 @@ class RenamePatchEntryOperator(Operator):
             material = bpy.data.materials.get(self.object_id)
             if material:
                 material.name = self.NewFileID
+                for node in material.node_tree.nodes:
+                    if node.type == 'GROUP':
+                        nodeName = node.node_tree.name
+                        if "-" in nodeName:
+                            if self.object_id in nodeName.split("-")[1]:
+                                node.node_tree.name = "-".join([nodeName.split("-")[0], self.NewFileID])
+                            else:
+                                PrettyPrint(f"Failed to find template from group: {nodeName}. Rename failed.", "error")
+                                material.name = self.object_id
+                                return {'CANCELLED'}
+                        else:
+                            PrettyPrint(f"Failed to rename material: {self.object_id}", "error")
+                            material.name = self.object_id
+                            return {'CANCELLED'}
+                        break
 
         # Redraw
         LoadEntryLists()
@@ -2573,8 +2650,10 @@ class DumpArchiveObjectOperator(Operator):
 
     object_id: StringProperty(options={"HIDDEN"})
     object_typeid: StringProperty(options={"HIDDEN"})
+    ignore_patch: BoolProperty(default=False, options={"HIDDEN"})
+
     def execute(self, context):
-        Entries = EntriesFromStrings(self.object_id, self.object_typeid)
+        Entries = EntriesFromStrings(self.object_id, self.object_typeid, self.ignore_patch)
         for Entry in Entries:
             if Entry != None:
                 data = Entry.GetData()
@@ -3054,7 +3133,7 @@ class ExportTexturePNGOperator(Operator, ExportHelper):
                         f.write(Entry.LoadedData.ToDDS())
                     else:
                         f.write(Entry.LoadedData.ToDDSArray()[i])
-                subprocess.run([Global_texconvpath, "-y", "-o", directory, "-ft", "png", "-f", "R8G8B8A8_UNORM", "-sepalpha", "-alpha", dds_path])
+                subprocess.run([Global_texconvpath, "-y", "-o", directory, "-ft", "png", "-f", "R8G8B8A8_UNORM", "-sepalpha", "-alpha", "--", dds_path])
                 if os.path.isfile(dds_path):
                     self.report({'INFO'}, f"Saved PNG Texture to: {dds_path}")
                 else:
@@ -3114,7 +3193,7 @@ class BatchExportTexturePNGOperator(Operator):
                 dds_path = f"{tempdir}/{EntryID}.dds"
                 with open(dds_path, 'w+b') as f:
                     f.write(Entry.LoadedData.ToDDS())
-                subprocess.run([Global_texconvpath, "-y", "-o", self.directory, "-ft", "png", "-f", "R8G8B8A8_UNORM", "-alpha", dds_path])
+                subprocess.run([Global_texconvpath, "-y", "-o", self.directory, "-ft", "png", "-f", "R8G8B8A8_UNORM", "-alpha", "--", dds_path])
                 filepath = f"{self.directory}/{EntryID}.png"
                 if os.path.isfile(filepath):
                     exportedfiles += 1
@@ -3179,7 +3258,7 @@ def SaveImagePNG(filepath, object_id):
             tempdir = GetTempDir()
             PrettyPrint(filepath)
             PrettyPrint(StingrayTex.Format)
-            subprocess.run([Global_texconvpath, "-y", "-o", tempdir, "-ft", "dds", "-dx10", "-f", StingrayTex.Format, "-sepalpha", "-alpha", filepath], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            subprocess.run([Global_texconvpath, "-y", "-o", tempdir, "-ft", "dds", "-dx10", "-f", StingrayTex.Format, "-sepalpha", "-alpha", "--", filepath], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
             fileName = os.path.basename(filepath).replace(".png", ".dds")
             dds_path = f"{tempdir}/{fileName}"
             PrettyPrint(dds_path)
@@ -3759,6 +3838,16 @@ class LatestReleaseOperator(Operator):
         url = "https://github.com/Boxofbiscuits97/HD2SDK-CommunityEdition/releases/latest"
         webbrowser.open(url, new=0, autoraise=True)
         return{'FINISHED'}
+
+class ViewChangelogOperator(Operator):
+    bl_label  = "View SDK Changelog"
+    bl_idname = "helldiver2.latest_release"
+    bl_description = "Opens The Github Page to the latest changelog"
+
+    def execute(self, context):
+        url = "https://github.com/Boxofbiscuits97/HD2SDK-CommunityEdition/releases/latest"
+        webbrowser.open(url, new=0, autoraise=True)
+        return{'FINISHED'}
         
 class AutoUpdateOperator(Operator):
     bl_label = "Auto Update Helldivers 2 SDK"
@@ -4013,11 +4102,33 @@ def CustomPropertyContext(self, context):
     layout.operator("helldiver2.copy_custom_properties", icon= 'COPYDOWN')
     layout.operator("helldiver2.paste_custom_properties", icon= 'PASTEDOWN')
     layout.separator()
+    
+    FileIDStr = ""
+    TypeIDStr = ""
+    units_in_patch = 0
+    unit_count = 0
+
+    for obj in bpy.context.selected_objects:
+        if obj.get("Z_ObjectID", None) is not None:
+            unit_count += 1
+            if Global_TocManager.ActivePatch != None and Global_TocManager.ActivePatch.GetEntry(obj["Z_ObjectID"], UnitID) != None:
+                units_in_patch += 1
+                FileIDStr += f"{obj['Z_ObjectID']},"
+                TypeIDStr += f"{UnitID},"
+
+    if units_in_patch > 0:
+        props = layout.operator("helldiver2.archive_removefrompatch", icon='X', text=f"Remove {units_in_patch} Units From Patch")
+        props.object_id     = FileIDStr
+        props.object_typeid = TypeIDStr
+        layout.separator()
+
     layout.operator("helldiver2.archive_animation_save", icon='ARMATURE_DATA')
     if bpy.context.object.type == "ARMATURE":
         if bpy.context.object.get("StateMachineID", None) is not None:
             layout.operator("helldiver2.search_animations", text="Show Animations for this Armature", icon='VIEWZOOM').state_machine_id = bpy.context.object.get("StateMachineID")
-    layout.operator("helldiver2.archive_unit_batchsave", icon= 'FILE_BLEND')
+
+    if unit_count > 0:
+        layout.operator("helldiver2.archive_unit_batchsave", icon= 'FILE_BLEND', text=f"Save {unit_count} Units")
     
 def CustomBoneContext(self, context):
     layout = self.layout
@@ -4235,6 +4346,7 @@ def LoadEntryLists():
                         new_item.item_filter_name = new_item.item_name
                 else:
                     new_item.item_filter_name = new_item.item_name
+                new_item.item_filter_name += f",{GetFriendlyNameFromID(Entry.FileID)}"
     if patch:
         for entry_type in patch.TocDict.keys():
             try:
@@ -4259,6 +4371,7 @@ def LoadEntryLists():
                         new_item.item_filter_name = new_item.item_name
                 else:
                     new_item.item_filter_name = new_item.item_name
+                new_item.item_filter_name += f",{GetFriendlyNameFromID(Entry.FileID)}"
     if state_machine_warning:
         PrettyPrint("State machine not loaded for all animations; filtering animations by armature may not work.", "warn")
         
@@ -4307,30 +4420,33 @@ class Hd2ToolPanelSettings(PropertyGroup):
     ShowExtras       : BoolProperty(name="Extra Entry Types", description = "Shows all Extra entry types.", default = False)
     FriendlyNames    : BoolProperty(name="Show Friendly Names", description="Enable friendly names for entries if they have any. Disabling this option can greatly increase UI preformance if a patch has a large number of entries.", default = True)
 
-    ImportMaterials  : BoolProperty(name="Import Materials", description = "Fully import materials by appending the textures utilized, otherwise create placeholders", default = True)
-    ImportLods       : BoolProperty(name="Import LODs", description = "Import LODs", default = False)
-    ImportGroup0     : BoolProperty(name="Import Group 0 Only", description = "Only import the first vertex group, ignore others", default = True)
-    ImportCulling    : BoolProperty(name="Import Culling Bounds", description = "Import Culling Bodies", default = False)
-    ImportStatic     : BoolProperty(name="Import Static Meshes", description = "Import Static Meshes", default = False)
-    MakeCollections  : BoolProperty(name="Make Collections", description = "Make new collection when importing meshes", default = False)
-    Force3UVs        : BoolProperty(name="Force 3 UV Sets", description = "Force at least 3 UV sets, some materials require this", default = True)
-    Force1Group      : BoolProperty(name="Force 1 Group", description = "Force mesh to only have 1 vertex group", default = True)
-    AutoLods         : BoolProperty(name="Auto LODs", description = "Automatically generate LOD entries based on LOD0, does not actually reduce the quality of the mesh", default = True)
-    RemoveGoreMeshes : BoolProperty(name="Remove Gore Meshes", description = "Automatically delete all of the verticies with the gore material when loading a model", default = False)
-    SaveBonePositions: BoolProperty(name="Save Animation Bone Positions", description = "Include bone positions in animation (may mess with additive animations being applied)", default = True)
-    ImportArmature   : BoolProperty(name="Import Armatures", description = "Import unit armature data", default = True)
-    MergeArmatures   : BoolProperty(name="Merge Armatures", description = "Merge new armatures to the selected armature", default = False)
-    ParentArmature   : BoolProperty(name="Parent Armatures", description = "Make imported armatures the parent of the imported mesh", default = True)
-    SplitUVIslands   : BoolProperty(name="Split UV Islands", description = "Split mesh by UV islands when saving", default = False)
+    ImportMaterials      : BoolProperty(name="Import Materials", description = "Fully import materials by appending the textures utilized, otherwise create placeholders", default = True)
+    ImportLods           : BoolProperty(name="Import LODs", description = "Import LODs", default = False)
+    ImportGroup0         : BoolProperty(name="Import Group 0 Only", description = "Only import the first vertex group, ignore others", default = True)
+    ImportCulling        : BoolProperty(name="Import Culling Bounds", description = "Import Culling Bodies", default = False)
+    ImportStatic         : BoolProperty(name="Import Static Meshes", description = "Import Static Meshes", default = False)
+    MakeCollections      : BoolProperty(name="Make Collections", description = "Make new collection when importing meshes", default = False)
+    Force3UVs            : BoolProperty(name="Force 3 UV Sets", description = "Force at least 3 UV sets, some materials require this", default = True)
+    Force1Group          : BoolProperty(name="Force 1 Group", description = "Force mesh to only have 1 vertex group", default = True)
+    AutoLods             : BoolProperty(name="Auto LODs", description = "Automatically generate LOD entries based on LOD0, does not actually reduce the quality of the mesh", default = True)
+    RemoveGoreMeshes     : BoolProperty(name="Remove Gore Meshes", description = "Automatically delete all of the verticies with the gore material when loading a model", default = False)
+    SaveBonePositions    : BoolProperty(name="Save Animation Bone Positions", description = "Include bone positions in animation (may mess with additive animations being applied)", default = True)
+    ImportArmature       : BoolProperty(name="Import Armatures", description = "Import unit armature data", default = True)
+    MergeArmatures       : BoolProperty(name="Merge Armatures", description = "Merge new armatures to the selected armature", default = False)
+    ParentArmature       : BoolProperty(name="Parent Armatures", description = "Make imported armatures the parent of the imported mesh", default = True)
+    SplitUVIslands       : BoolProperty(name="Split UV Islands", description = "Split mesh by UV islands when saving", default = False)
+    SkipMeshImportErrors : BoolProperty(name="Skip Mesh Import Errors", description = "Continue importing meshes even if errors are encountered", default = False)
     # Search
     SearchField      : StringProperty(default = "", update=ChangeSearchString)
 
     # Tools
-    EnableTools           : BoolProperty(name="Special Tools", description = "Enable advanced SDK Tools", default = False)
-    UnloadEmptyArchives   : BoolProperty(name="Unload Empty Archives", description="Unload Archives that do not Contain any Textures, Materials, or Meshes", default = True)
-    DeleteOnLoadArchive   : BoolProperty(name="Nuke Files on Archive Load", description="Delete all Textures, Materials, and Meshes in project when selecting a new archive", default = False)
-    UnloadPatches         : BoolProperty(name="Unload Previous Patches", description="Unload Previous Patches when bulk loading")
-    LoadFoundArchives     : BoolProperty(name="Load Found Archives", description="Load the archives found when search by entry ID", default=True)
+    EnableTools               : BoolProperty(name="Special Tools", description = "Enable advanced SDK Tools", default = False)
+    UnloadEmptyArchives       : BoolProperty(name="Unload Empty Archives", description="Unload Archives that do not Contain any Textures, Materials, or Meshes", default = True)
+    DeleteOnLoadArchive       : BoolProperty(name="Nuke Files on Archive Load", description="Delete all Textures, Materials, and Meshes in project when selecting a new archive", default = False)
+    UnloadPatches             : BoolProperty(name="Unload Previous Patches", description="Unload Previous Patches when bulk loading")
+    LoadFoundArchives         : BoolProperty(name="Load Found Archives", description="Load the archives found when search by entry ID", default=True)
+    LoadOnlyFirstFoundArchive : BoolProperty(name="Load Only First Found Archive", description="Only load the first archive found when searching by entry ID, otherwise all archives with the entry will be loaded", default=False)
+    SearchAllInclusiveOnly    : BoolProperty(name="Search All Inclusive Only", description="When searching for an archive, only show archives that have all entries being searched for", default=False)
 
     AutoSaveUnitMaterials : BoolProperty(name="Autosave Unit Materials", description="Save unsaved material entries applied to meshes when the unit is saved", default = True)
     SaveNonSDKMaterials   : BoolProperty(name="Save Non-SDK Materials", description="Toggle if non-SDK materials should be autosaved when saving a mesh", default = False)
@@ -4453,9 +4569,9 @@ class MY_UL_List(UIList):
                 entry = Global_TocManager.GetEntry(int(item.item_name), int(item.item_type))
                 if entry and entry.MaterialTemplate:
                     type_icon = "NODE_MATERIAL"
-            friendly_name = GetFriendlyNameFromID(int(item.item_name))
+            name = GetFriendlyNameFromID(int(item.item_name)) if bpy.context.scene.Hd2ToolPanelSettings.FriendlyNames else item.item_name
             current_list_index = getattr(context.scene, f"index_{item.item_type}")
-            op = row.operator("helldiver2.archive_entry", icon=type_icon, text=friendly_name, emboss=item.item_selected, depress=item.item_selected)
+            op = row.operator("helldiver2.archive_entry", icon=type_icon, text=name, emboss=item.item_selected, depress=item.item_selected)
             op.list_id = f"list_{item.item_type}" #"active_propname.replace("index", "list").replace("_dummy", "")
             op.list_index = index
             #row.label(text=friendly_name, icon = type_icon, depress=True)
@@ -4607,9 +4723,6 @@ class HellDivers2ToolsPanel(Panel):
             row = layout.row()
             row.label(text="Please Use Blender 4.0.X to 4.3.X")
             return
-        
-        if bpy.app.version[1] > 0:
-            row.label(text="Warning! Soft Supported Blender Version. Issues may Occur.", icon='ERROR')
 
 
         row = layout.row()
@@ -4617,16 +4730,25 @@ class HellDivers2ToolsPanel(Panel):
         global Global_addonUpToDate
         global Global_latestAddonVersion
         global Global_gamepathIsValid
+        global Global_showChangelog
 
         if Global_addonUpToDate == None:
             row.label(text="Addon Failed to Check latest Version")
         elif not Global_addonUpToDate:
+            Global_showChangelog = True
             row.label(text="Addon is Outdated!")
-            row.label(text=f"Latest Version: {Global_latestAddonVersion}")
+            row.label(text=f"Latest Version: v{Global_latestAddonVersion}")
             row = layout.row()
             row.alignment = 'CENTER'
             row.scale_y = 2
             row.operator("helldiver2.update", icon = 'URL')
+            row.separator()
+
+        if Global_showChangelog:
+            row = layout.row()
+            row.alignment = 'CENTER'
+            row.scale_y = 1.5
+            row.operator("helldiver2.latest_release", icon = 'TEXT', text=f"View SDK v{Global_latestAddonVersion} Changelog")
             row.separator()
 
         # Draw Settings, Documentation and Spreadsheet
@@ -4650,6 +4772,7 @@ class HellDivers2ToolsPanel(Panel):
             row.prop(scene.Hd2ToolPanelSettings, "ImportCulling")
             row.prop(scene.Hd2ToolPanelSettings, "ImportStatic")
             row.prop(scene.Hd2ToolPanelSettings, "RemoveGoreMeshes")
+            row.prop(scene.Hd2ToolPanelSettings, "SkipMeshImportErrors")
             row.prop(scene.Hd2ToolPanelSettings, "ParentArmature")
             row.prop(scene.Hd2ToolPanelSettings, "ImportArmature")
             row = settings_box.row(); row.separator(); row.label(text="Export Options"); box = row.box(); row = box.grid_flow(columns=1)
@@ -4680,7 +4803,8 @@ class HellDivers2ToolsPanel(Panel):
                 row.prop(scene.Hd2ToolPanelSettings, "UnloadEmptyArchives")
                 row.prop(scene.Hd2ToolPanelSettings, "UnloadPatches")
                 row.prop(scene.Hd2ToolPanelSettings, "LoadFoundArchives")
-                #row.prop(scene.Hd2ToolPanelSettings, "DeleteOnLoadArchive")
+                row.prop(scene.Hd2ToolPanelSettings, "LoadOnlyFirstFoundArchive")
+                row.prop(scene.Hd2ToolPanelSettings, "SearchAllInclusiveOnly")
                 row = box.row()
                 row.operator("helldiver2.search_by_entry", icon= 'FILEBROWSER')
                 row.operator("helldiver2.bulk_load", icon= 'IMPORT', text="Bulk Load")
@@ -4908,7 +5032,7 @@ class HellDivers2ToolsPanel(Panel):
 class WM_MT_button_context(Menu):
     bl_label = "Entry Context Menu"
 
-    def draw_entry_buttons(row, Entry):
+    def draw_entry_buttons(row, Entry: TocEntry):
         if not Entry.IsSelected:
             Global_TocManager.SelectEntries([Entry])
 
@@ -5010,6 +5134,10 @@ class WM_MT_button_context(Menu):
         props = row.operator("helldiver2.archive_object_dump_export", icon='PACKAGE', text=DumpObjectName)
         props.object_id     = FileIDStr
         props.object_typeid = TypeIDStr
+        props = row.operator("helldiver2.archive_object_dump_export", icon='PACKAGE', text=f"{DumpObjectName} (Original)")
+        props.object_id     = FileIDStr
+        props.object_typeid = TypeIDStr
+        props.ignore_patch = True
         # Draw dump import button
         # if AreAllMaterials and SingleEntry: row.operator("helldiver2.archive_object_dump_import", icon="IMPORT", text="Import Raw Dump").object_id = FileIDStr
         # Draw save buttons
@@ -5105,7 +5233,7 @@ class WM_MT_button_context(Menu):
         # Draw import buttons
         # TODO: Add generic import buttons
         layout.separator()
-        if item_type == UnitID:       layout.operator("helldiver2.archive_unit_import", icon='IMPORT', text=f"Import {len(selected_items)} Mesh{'es' if len(selected_items) > 1 else ''}").object_id = FileIDStr
+        if item_type == UnitID:       layout.operator("helldiver2.archive_unit_import", icon='IMPORT', text=f"Import {len(selected_items)} Unit{'s' if len(selected_items) > 1 else ''}").object_id = FileIDStr
         elif item_type == TexID:      layout.operator("helldiver2.texture_import",      icon='IMPORT', text=f"Import {len(selected_items)} Texture{'s' if len(selected_items) > 1 else ''}").object_id = FileIDStr
         elif item_type == MaterialID: layout.operator("helldiver2.material_import",     icon='IMPORT', text=f"Import {len(selected_items)} Material{'s' if len(selected_items) > 1 else ''}").object_id = FileIDStr
         #elif AreAllParticles:
@@ -5119,6 +5247,10 @@ class WM_MT_button_context(Menu):
         props = layout.operator("helldiver2.archive_object_dump_export", icon='PACKAGE', text=f"Export {len(selected_items)} Object Dump{'s' if len(selected_items) > 1 else ''}")
         props.object_id     = FileIDStr
         props.object_typeid = TypeIDStr
+        props = layout.operator("helldiver2.archive_object_dump_export", icon='PACKAGE', text=f"Export {len(selected_items)} Object Dump{'s' if len(selected_items) > 1 else ''} (Original)")
+        props.object_id     = FileIDStr
+        props.object_typeid = TypeIDStr
+        props.ignore_patch = True
         # Draw dump import button
         # if AreAllMaterials and SingleEntry: layout.operator("helldiver2.archive_object_dump_import", icon="IMPORT", text="Import Raw Dump").object_id = FileIDStr
         # Draw save buttons
@@ -5127,7 +5259,7 @@ class WM_MT_button_context(Menu):
             if len(selected_items) == 1:
                 layout.operator("helldiver2.archive_unit_save", icon='FILE_BLEND', text="Save Mesh").object_id = list_item.item_name
             else:
-                layout.operator("helldiver2.archive_unit_batchsave", icon='FILE_BLEND', text=f"Save {len(selected_items)} Meshes")
+                layout.operator("helldiver2.archive_unit_batchsave", icon='FILE_BLEND', text=f"Save {len(selected_items)} Units")
         elif item_type == TexID:
             layout.operator("helldiver2.texture_saveblendimage", icon='FILE_BLEND', text=f"Save {len(selected_items)} Blender Texture{'s' if len(selected_items) > 1 else ''}").object_id = FileIDStr
             layout.separator()
@@ -5278,6 +5410,7 @@ classes = (
     StateMachineSaveOperator,
     SetBoneRagdollOperator,
     AddLightOperator,
+    ViewChangelogOperator,
 )
 
 Global_TocManager = TocManager()
@@ -5302,6 +5435,7 @@ def register():
     CheckAddonUpToDate()
     InitializeConfig()
     UpdateArchiveHashes()
+    UpdateFriendlyNames()
     LoadTypeHashes()
     LoadNameHashes()
     LoadArchiveHashes()

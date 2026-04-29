@@ -44,6 +44,7 @@
         "1d9e8acfc3ee3ace": "CW-22 Kodiak",
         "7b19ad7f21d347b4": "CW-36 Winter Warrior",
         "3d8cf2088ed56091": "DP-00 Tactical",
+        "d2fde496226be96f": "DP-8 Mountain-Scaled",
         "bb8d9bee0012e672": "DP-11 Champion of the People",
         "1beb230363aaf427": "DP-40 Hero of the Federation",
         "5e0dba19a567fb99": "DP-53 Savior of the Free",
@@ -86,6 +87,8 @@
         "85d392768bf6a259":	"RS-89 Shadow Paragon",
         "1e2ba3712fa1b030":	"RS-100 Sanctioner",
         "5def9553433fceda": "SA-04 Combat Technician",
+        "14060e113e41f4ab": "SA-8 Ram",
+        "d895f447d332c331": "SA-7 Headfirst",
         "1de000bcfe445daf": "SA-12 Servo Assisted",
         "aade1a73a16b5fb5": "SA-25 Steel Trooper",
         "d1421b2988398f0a": "SA-32 Dynamo",
@@ -106,7 +109,13 @@
         "19b5a68e61d7a9d7": "UF-16 Inspector",
         "871290e9d5703851": "UF-50 Bloodhound",
         "91033cfaaad4ad18": "UF-84 Doubt Killer",
-        "0fecb336be1d287b": "UF-84 Doubt Killer"
+        "0fecb336be1d287b": "UF-84 Doubt Killer",
+        "81bf25bbdd4624c1": "CPH-26 Commandant",
+        "e7449208a97fa22e": "CPG-48 Sapper",
+        "07a2056e7a5f313f": "CPR-80 Bulwark",
+        "5fec3757445c4e16": "O-2 Heavy Operator",
+        "f9ced2d898787705": "O-3 Free Spirit",
+        "50038ca035821a74": "O-44 Bonded Pilot"
     },
 
     "Helmet": {
@@ -152,6 +161,7 @@
         "e9f7da425997f38b": "CW-22 Kodiak",
         "9cfd4019e0902fa8": "CW-36 Winter Warrior",
         "eb3914f15e4151ff": "DP-00 Tactical",
+        "59d238094a164c88": "DP-8 Mountain-Scaled",
         "a45cfd81d5ea873b": "DP-11 Champion of the People",
         "9d538582c1cd96b8": "DP-40 Hero of the Federation",
         "0121fd0e8370a1dc": "DP-53 Savior of the Free",
@@ -192,6 +202,8 @@
         "804e40c3115e9650":	"RS-89 Shadow Paragon",
         "b977f9d5411386d0":	"RS-100 Sanctioner",
         "7f49d834a7764207": "SA-04 Combat Technician",
+        "a72abfe9616771df":	"SA-8 Ram",
+        "719e9e75f790d580":	"SA-7 Headfirst",
         "3196ede0c925ba83": "SA-12 Servo-Assisted",
         "fd1028aaaa651c2f": "SA-25 Steel Trooper",
         "e4e4639f4365ca4e": "SA-32 Dynamo",
@@ -209,7 +221,13 @@
         "fb025c06b0408e5f": "UF-16 Inspector",
         "15dcd137ebe874ed": "UF-50 Bloodhound",
         "292b09dac80ce1de": "UF-84 Doubt Killer",
-        "88b7d737b6e62cc0": "UF-84 Doubt Killer"
+        "88b7d737b6e62cc0": "UF-84 Doubt Killer",
+        "a67993f7af5594d8": "CPH-26 Commandant",
+        "d4fb7d61ad409841": "CPG-48 Sapper",
+        "51a7562176a8ac19": "CPR-80 Bulwark",
+        "5e40404d846b2b00": "O-2 Heavy Operator",
+        "a2999407862595df": "O-3 Free Spirit",
+        "3cf26a29a0012282": "O-44 Bonded Pilot"
     },
 
     "Cape": {
@@ -286,7 +304,14 @@
         "61f85b8c1bf97b03": "Foe Rent Asunder",
         "fd679c4070acb043": "Mark of the Constrictor",
         "8ca53afa7fb23710": "De-Forester's Sailcloth",
-        "25839eed0400603b": "Against the Tyrant Cloud"
+        "25839eed0400603b": "Against the Tyrant Cloud",
+        "a751b4cd139b0eb3": "Reckoning's Cheer",
+        "7caea0a631afeb5f": "Dignity of Toil",
+        "1ff9ac94b5d8c7cd": "Crest of the Unsullied",
+        "ab5053cd9f74be7d": "Testament To Attrition",
+        "91b82c8f3aa19bf7": "Watchful Compatriot",
+        "a129aa656628c85a": "Free-Spirited Spangles",
+        "c90bfd2f73908de7": "Diagram of the Noblest Payload"
     },
 
     "Icons": { 
@@ -383,40 +408,56 @@
         "6502c77f9595fbc2": "Voteless",
         "e7765eef5f60acea": "Fleshmob",
         "70b4860e8169622e": "Overship",
-        "dd43ebba60a66968": "Leviathan"
+        "dd43ebba60a66968": "Leviathan",
+        "b97df541a966620a": "Gatekeeper",
+        "687d548654b91be6": "Veracitor",
+        "864114866d6b24eb": "Obtruder"
     },
 
-    "Automaton": {
-        "a96722adb4b2c43a": "Berserker",
-        "eada82fbe2b1a689": "Commissar",
-        "1ff5cb1fc2fe055b": "Devastator",
-        "3cf45796343b36df": "Devastator",
-        "eaa001bca299717e": "Devastator",
-        "a2a2eb28bc511575": "Factory Strider",
-        "27cb3df21f6599fd": "Gun Ship",
-        "086e54bc88865de2": "Hulk",
-        "499591b12328acbd": "Hulk",
-        "eda39e568ad5f302": "Hulk",
-        "094394c2a2c22f36": "Scout Strider",
-        "2c8d8cc831d0c732": "Reinforced Scout Strider",
-        "063a5b895ed482e6": "Tank",
-        "1a3dc966179bd5a4": "Tank",
-        "62ec9c912c88c15d": "Tank",
-        "079529fe7dd7c0cb": "Trooper",
-        "387a99b22d643bb1": "Trooper",
-        "69c66efe95decaf0": "Trooper",
-        "769ee339c8ca621b": "Trooper",
-        "77b1dfa352e8cbed": "Trooper",
-        "7a8ede61a5d379fd": "Trooper",
-        "88e51fafbe068536": "Commissar",
-        "9dedbfc1b397d535": "Trooper",
-        "b7aedfc7bff6956c": "Trooper",
-        "bb2633ec2b4e2f86": "Trooper",
-        "c5f8c8cd5e25dcb1": "Trooper",
-        "f042cba420e65b59": "Trooper",
-        "031c90406564341b": "War Strider",
-        "fdf011daecf24312": "Drop Ship"
-    },
+	"Automaton": {
+		"62ec9c912c88c15d": "Annihilator Tank",
+		"1a3dc966179bd5a4": "Barrager Tank",
+		"62540171a97848cf": "Berserker",
+		"9dedbfc1b397d535": "Brawler",
+		"eada82fbe2b1a689": "Commissar",
+		"4bec69547a558869": "Devastator",
+		"fdf011daecf24312": "Dropship",
+		"a2a2eb28bc511575": "Factory Strider",
+		"27cb3df21f6599fd": "Gunship",
+		"eaa001bca299717e": "Heavy Devastator",
+		"eda39e568ad5f302": "Hulk Bruiser",
+		"086e54bc88865de2": "Hulk Obliterator",
+		"499591b12328acbd": "Hulk Scorcher",
+		"881270fab24e80a4": "MG Raider",
+		"7f37f5671f6cdbb5": "Marauder",
+		"2c8d8cc831d0c732": "Reinforced Scout Strider",
+		"3cf45796343b36df": "Rocket Devastator",
+		"079529fe7dd7c0cb": "Rocket Raider",
+		"094394c2a2c22f36": "Scout Strider",
+		"063a5b895ed482e6": "Shredder Tank",
+		"77b1dfa352e8cbed": "Trooper",
+		"031c90406564341b": "War Strider"
+	  },
+	"Automaton: Jet Brigade": {
+		"387a99b22d643bb1": "Assault Raider",
+		"fcaeec7dae9455c9": "Commissar",
+		"98ab3235f841d3c4": "Devastator",
+		"6f9806c17c09a304": "Hulk Bruiser",
+		"11d2a5cf72e88043": "Hulk Scorcher",
+		"9737e8ff4cf745fe": "MG Raider",
+		"4555c6743ced97e3": "Trooper"
+	  },
+	"Automaton: Incineration Corps": {
+		"f3f0536e7e34ad11": "Conflagration Devastator",
+		"7c33f358689e2c74": "Hulk Firebomber",
+		"88e1a0e04fa84f73": "Incendiary MG Devastator",
+		"800b2c57b7ec4d9d": "Incendiary Rocket Raider",
+		"7a8ede61a5d379fd": "Pyro Trooper"
+	  },
+	"Automaton: Cyborg Legion": {
+		"5e47518596f8175d": "Cyborgs",
+		"b9a08b6ab841d83e": "Vox Engine"
+	  },
     
     "Terminid": {
         "855b36a0321f7106": "Bile Spewer",
@@ -457,7 +498,10 @@
     "Vehicle": {
         "22749a294788af66": "EXO-45 Patriot Exosuit",
         "e72d3e9b05c3db0b": "EXO-49 Emancipator Exosuit",
+        "0a4bd8a1833f11b2": "EXO-51 Lumberer Exosuit",
+        "7de417db7552d9fc": "EXO-55 Breakthrough Exosuit",
         "0bdf199f7ac14f43": "M-102 Fast Recon Vehicle (FRV)",
+        "68ebdce3f7498179": "TD-220 Bastion MK XVI (Tank)",
         "9aac8a3a538ce3b7": "Pelican-1"
     },
 
@@ -468,10 +512,12 @@
         "21e90918df69eff7": "G-16 Impact",
         "543ff1ff0bd82b44": "G-23 Stun",
         "ddcea5fdd4071767": "G-31 Arc",
+        "2f1147605182c6ab": "G-48 Giga Grenade",
         "f590569dbbc6fe2d": "G-50 Seeker",
         "2cb3f69ab9bc1297": "G-109 Urchin",
         "dfb81f9917285965": "G-123 Thermite",
         "1721eee4581a9c54": "G-142 PyroTech",
+        "f111fa26003c0de9": "G/SH-39 Shield",
         "3bf0844097ab595f": "K-2 Throwing Knife",
         "fae34acb79502f53": "TM-01 Lure Mine"
     },
@@ -511,7 +557,9 @@
         "0601a2f91ec178a9": "MP-98 Knight",
         "0edad8ddec238bd9": "SMG-32 Reprimand",
         "f230d2d2adcc034a": "SMG-72 Pummeler & SMG-37 Defender",
-        "9494c346e564d15f": "StA-11 SMG"
+        "9494c346e564d15f": "StA-11 SMG",
+        "a275324ae43dfd50": "SMG/FLAM-34 Stoker",
+        "94eaeaffd878dd6d": "SMG-203 Gallant"
     },
 
     "Shotgun": {
@@ -519,6 +567,7 @@
         "695ba4a2683b4ce3": "SG-8S Slugger",
         "522be23400cc6086": "SG-20 Halt",
         "31894c33c4ed1e2a": "SG-88 Break-Action Shotgun",
+        "933148104d23a322": "SG-97 Sweeper",
         "c5a05d09369d0670": "SG-225 Breaker, SG-225SP Breaker Spray & Pray",
         "2fe755e42b659f64": "SG-225IE Breaker Incendiary",
         "7af5df78217fd645": "SG-451 Cookout",
@@ -535,6 +584,7 @@
         "55938279f6ef8664": "ARC-12 Blitzer",
         "3a49b4448eaa94fe": "LAS-5 Scythe",
         "6db0c562c2bc10b3": "LAS-16 Sickle",
+        "f79b65e482594bef": "LAS-16 Trident",
         "7f927f50fa6c50e8": "LAS-17 Double-Edge Sickle",
         "c51f160470b34ae3": "PLAS-1 Scorcher & PLAS-101 Purifier",
         "351506bb55187cf9": "PLAS-39 Accelerator",
@@ -555,22 +605,25 @@
         "1b006880ac88d1cd": "P-35 Re-Educator",
         "41ce78fe8f96bebe": "P-72 Crisper",
         "9effc1c882578baf": "PLAS-15 Loyalist",
-        "2350348a9acf49c4": "SG-22 Bushwhacker"
+        "2350348a9acf49c4": "SG-22 Bushwhacker",
+        "64c37a90c0d906de": "P-33 Missile Pistol"
     },
 
     "Melee": {
         "3cfc68e6bf19f67d": "CQC-2 Saber",
         "1982853d15d996da": "CQC-5 Combat Hatchet",
         "56aa04adbbeea69f": "CQC-19 Stun Lance",
+        "39ddd2e6f131c873": "CQC-20 Breaching Hammer",
         "f3c65eaab75f1fc2": "CQC-30 Stun Baton",
         "f5014993c8402d87": "CQC-42 Machete",
-        "49de16e1343250e4": "Entrenchment Tool"
+        "49de16e1343250e4": "CQC-73 Entrenchment Tool"
     },
 
     "Pistol": {
         "bf2250de0b17285c": "P-2 Peacemaker",
         "94b554570b12c088": "P-4 Senator",
         "99f20df1c4cf885a": "P-19 Redeemer",
+        "58038f21c4334481": "P-69 Veto",
         "5d5c93ef05a46880": "P-92 Warrant",
         "b47514ae19a494f0": "P-113 Verdict",
         "2a5298e1c2f70c82": "M6C SOCOM Pistol"
@@ -580,14 +633,17 @@
         "6ad7cc21015a5f85": "AC-8 Autocannon",
         "2a9fb8f5d0576eae": "ARC-3 Arc Thrower",
         "ea6967f8565a2d76": "APW-1 Anti-Materiel Rifle",
+        "df16f5c644edc2b1": "B/FLAM-80 Cremator",
         "c40e3b3fa79052ec": "CQC-1 One True Flag",
         "eeebc5fd26fe0f40": "CQC-9 Defoliation Tool",
         "de96cd7cc69628bc": "EAT-17 Expendable Anti-Tank",
+        "fde8230c79315087": "EAT-411 Leveller",
         "5d68e55823acd1bf": "EAT-700 Expendable Napalm",
         "530bb611a14b6ce3": "FAF-14 Spear",
         "784671f2b3a4da79": "FLAM-40 Flamethrower",
         "6ca87637eaeb5923": "GR-8 Recoilless Rifle",
         "0089bbe3e284fcaa": "GL-21 Grenade Launcher",
+        "f24cfa612428175b": "GL-28 Belt-Fed Grenade Launcher",
         "4fee9cc13c0b4cec": "GL-52 De-escalator",
         "cf1acde501ccfa1b": "LAS-98 Laser Cannon & LAS-99 Quasar Cannon",
         "8f295b4d04c3a06c": "M-105 Stalwart",
@@ -601,7 +657,8 @@
         "70d708e5fd627493": "S-11 Speargun",
         "93fa804787551c15": "SH-51 Directional Shield",
         "5795e99a988d10b7": "StA-X3 W.A.S.P. Launcher",
-        "750605cfc0173701": "TX-41 Sterilizer"
+        "750605cfc0173701": "TX-41 Sterilizer",
+        "b75f652bed19144a": "MGX-42 Bullet Storm"
     },
 
     "Unreleased": {
@@ -675,7 +732,8 @@
         "3968938b8147df7c": "Solo Light",
         "981a0bf27dd6a546": "Tenderizer Muzzle Break",
         "64f56a84b883af7d": "Vertical Foregrip",
-        "c5de422eed100414": "Vertical Foregrip W/ Flashlight"
+        "c5de422eed100414": "Vertical Foregrip W/ Flashlight",
+        "838a0fde641bb2b0": "Sweeper Bayonet"
     },
 
     "Backpack": {

@@ -1,6 +1,6 @@
 bl_info = {
     "name": "Helldivers 2 SDK: Community Edition",
-    "version": (3, 7, 3),
+    "version": (3, 8, 0),
     "blender": (4, 0, 0),
     "category": "Import-Export",
 }
@@ -980,7 +980,7 @@ class TocManager():
                 executor.shutdown()
         return toc
     
-    def GetEntryByLoadArchive(self, FileID: int, TypeID: int):
+    def GetEntryByLoadArchive(self, FileID: int, TypeID: int) -> TocEntry:
         return self.GetEntry(FileID, TypeID, SearchAll=True, IgnorePatch=True)
     
     def ArchiveNotEmpty(self, toc):
@@ -1018,7 +1018,7 @@ class TocManager():
 
     #______________________#
     # ---- Entry Code ---- #
-    def GetEntry(self, FileID, TypeID, SearchAll=False, IgnorePatch=False):
+    def GetEntry(self, FileID, TypeID, SearchAll=False, IgnorePatch=False) -> TocEntry:
         # Check Active Patch
         if not IgnorePatch and self.ActivePatch != None:
             Entry = self.ActivePatch.GetEntry(FileID, TypeID)
@@ -1046,7 +1046,7 @@ class TocManager():
         Entry = self.GetEntry(FileID, TypeID, SearchAll)
         if Entry != None: Entry.Load(Reload)
 
-    def Save(self, FileID, TypeID):
+    def Save(self, FileID, TypeID) -> bool:
         Entry = self.GetEntry(FileID, TypeID)
         if Entry == None:
             PrettyPrint(f"Failed to save entry {FileID}")
@@ -1124,7 +1124,7 @@ class TocManager():
             raise Exception("No patch exists, please create one first")
         self.ActivePatch.AddEntry(Entry)
         
-    def AddEntryToPatchID(self, Entry, dest_id):
+    def AddEntryToPatchID(self, Entry, dest_id) -> TocEntry:
         if self.ActivePatch == None:
             raise Exception("No patch exists, please create one first")
             
@@ -1135,7 +1135,7 @@ class TocManager():
             return PatchEntry
         return None
 
-    def AddEntryToPatch(self, FileID, TypeID):
+    def AddEntryToPatch(self, FileID, TypeID) -> TocEntry:
         if self.ActivePatch == None:
             raise Exception("No patch exists, please create one first")
 
@@ -1153,16 +1153,16 @@ class TocManager():
             self.ActivePatch.RemoveEntry(FileID, TypeID)
         return None
 
-    def GetPatchEntry(self, Entry):
+    def GetPatchEntry(self, Entry) -> TocEntry:
         if self.ActivePatch != None:
             return self.ActivePatch.GetEntry(Entry.FileID, Entry.TypeID)
         return None
-    def GetPatchEntry_B(self, FileID, TypeID):
+    def GetPatchEntry_B(self, FileID, TypeID) -> TocEntry:
         if self.ActivePatch != None:
             return self.ActivePatch.GetEntry(FileID, TypeID)
         return None
 
-    def IsInPatch(self, Entry):
+    def IsInPatch(self, Entry) -> bool:
         if self.ActivePatch != None:
             PatchEntry = self.ActivePatch.GetEntry(Entry.FileID, Entry.TypeID)
             if PatchEntry != None: return True
@@ -2319,6 +2319,28 @@ class NextArchiveOperator(Operator):
                 bpy.context.scene.Hd2ToolPanelSettings.LoadedArchives = Global_TocManager.LoadedArchives[nextIndex].Name
                 return {'FINISHED'}
         return {'CANCELLED'}
+
+class LoadPlayerAvatarOperator(Operator):
+    bl_label = "Import Player Avatar"
+    bl_description = "Imports the Player Avatar Unit"
+    bl_idname = "helldiver2.archive_import_avatar"
+
+    def execute(self, context):
+        avatar_archive_id = "18235e0c9ec0e636"
+        avatar_entry_id = 5556372446766824087
+        path = Global_gamepath + avatar_archive_id
+        if not os.path.exists(Global_gamepath):
+            self.report({'ERROR'}, "Current Filepath is Invalid. Change this in the Settings")
+            context.scene.Hd2ToolPanelSettings.MenuExpanded = True
+            return{'CANCELLED'}
+        Global_TocManager.LoadArchive(path, True, False)
+        Global_TocManager.Load(avatar_entry_id, UnitID)
+
+        # Redraw
+        for area in context.screen.areas:
+            if area.type == "VIEW_3D": area.tag_redraw()
+        
+        return{'FINISHED'}
 #endregion
 
 #region Operators: Entries
@@ -2388,6 +2410,35 @@ class StateMachineBlendMaskWeightOperator(Operator):
         Entry = Global_TocManager.GetEntry(self.object_id, StateMachineID)
         if Entry:
             Entry.LoadedData.blend_masks[self.blend_mask_index].bone_weights[self.bone_index] = self.bone_weight
+        else:
+            self.report({'ERROR'}, f"Could not find entry for ID: {self.object_id}")
+            return {'CANCELLED'}
+        return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+    
+class StateMachineAnimationIDOperator(Operator):
+    bl_label = "Animation ID"
+    bl_idname = "helldiver2.animation_id"
+    bl_description = "Animation ID"
+
+    object_id: bpy.props.StringProperty()
+    animation_id: bpy.props.StringProperty()
+    animation_index: bpy.props.IntProperty()
+    
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "animation_id")
+        
+    def execute(self, context):
+        Entry = Global_TocManager.GetEntry(self.object_id, StateMachineID)
+        if Entry:
+            if self.animation_index < len(Entry.LoadedData.animation_ids):
+                Entry.LoadedData.animation_ids[self.animation_index] = int(self.animation_id)
+            else:
+                self.report({'ERROR'}, f"Animation index {self.animation_index} out of range")
+                return {'CANCELLED'}
         else:
             self.report({'ERROR'}, f"Could not find entry for ID: {self.object_id}")
             return {'CANCELLED'}
@@ -2850,6 +2901,19 @@ class SaveStingrayUnitOperator(Operator):
         if SwapID and SwapID.isnumeric() and SwapID != ID:
             dest_id = int(SwapID)
         Entry = Global_TocManager.AddEntryToPatchID(Entry, dest_id)
+        stateMachineID = BonesID = None
+        for modifier in object.modifiers:
+            if modifier.type == "ARMATURE":
+                armature_obj = modifier.object
+                stateMachineID = armature_obj["StateMachineID"]
+                BonesID = armature_obj["BonesID"]
+                PrettyPrint(f"Found StateMachineID: {stateMachineID} and BonesID: {BonesID}")
+        if stateMachineID != None:
+            PrettyPrint(f"Set StateMachineRef: {stateMachineID}")
+            Entry.LoadedData.StateMachineRef = int(stateMachineID)
+        if BonesID != None:
+            PrettyPrint(f"Set BonesRef: {BonesID}")
+            Entry.LoadedData.BonesRef = int(BonesID)
         model = GetObjectsMeshData(Global_TocManager, Global_BoneNames)
         BlenderOpts = bpy.context.scene.Hd2ToolPanelSettings.get_settings_dict()
         if Entry is None:
@@ -2924,7 +2988,15 @@ class BatchSaveStingrayUnitOperator(Operator):
                         return {'CANCELLED'}
                 except:
                     self.report({'INFO'}, f"{object.name} has no HD2 Swap ID. Skipping Swap.")
-                IDitem = [ID, SwapID]
+                stateMachineID = BonesID = None
+                for modifier in object.modifiers:
+                    PrettyPrint(f"Modifiers: {modifier.type}")
+                    if modifier.type == "ARMATURE":
+                        armature_obj = modifier.object
+                        stateMachineID = armature_obj["StateMachineID"]
+                        BonesID = armature_obj["BonesID"]
+                        PrettyPrint(f"Found StateMachineID: {stateMachineID} and BonesID: {BonesID}")
+                IDitem = [ID, SwapID, stateMachineID, BonesID]
                 if IDitem not in IDs:
                     IDs.append(IDitem)
             except KeyError:
@@ -2966,7 +3038,13 @@ class BatchSaveStingrayUnitOperator(Operator):
                 dest_id = int(SwapID)
             Entry = Global_TocManager.AddEntryToPatchID(Entry, dest_id)
             entries.append(Entry)
-        MeshData = GetObjectsMeshData(Global_TocManager, Global_BoneNames)    
+        if IDitem[2] != None: 
+            PrettyPrint(f"Set StateMachineRef: {IDitem[2]}")
+            Entry.LoadedData.StateMachineRef = int(IDitem[2])
+        if IDitem[3] != None:
+            PrettyPrint(f"Set BonesRef: {IDitem[3]}")
+            Entry.LoadedData.BonesRef = int(IDitem[3])
+        MeshData = GetObjectsMeshData(Global_TocManager, Global_BoneNames)
         for i, IDitem in enumerate(IDs):
             ID = IDitem[0]
             SwapID = IDitem[1]
@@ -3539,6 +3617,7 @@ class SaveStingrayAnimationOperator(Operator):
             return{'CANCELLED'}
         self.report({'INFO'}, f"Saved Animation")
         return {'FINISHED'}
+#endregion
 
 #region Operators: Particles
 class SaveStingrayParticleOperator(Operator):
@@ -4728,7 +4807,25 @@ class HellDivers2ToolsPanel(Panel):
                         op.bone_weight = weight
                         op.blend_mask_index = i
                 i -= 1
-                    
+            
+            row = layout.row()
+            if f"animation_ids" not in Global_Foldouts:
+                Global_Foldouts[f"animation_ids"] = False
+            animation_ids_show = Global_Foldouts[f"animation_ids"]
+            fold_icon = "DOWNARROW_HLT" if animation_ids_show else "RIGHTARROW"
+            row.operator("helldiver2.collapse_section", text=f"Animations", icon=fold_icon, emboss=False).type = f"animation_ids"
+            
+            if animation_ids_show:
+                for k, animation_id in enumerate(state_machine.animation_ids):
+                    row = layout.row()
+                    split = row.split()
+                    text = GetFriendlyNameFromID(animation_id)
+                    split.label(text=text)
+                    op = split.operator("helldiver2.animation_id", text=f"{animation_id}")
+                    op.object_id = str(state_machine_entry.FileID)
+                    op.animation_index = k
+                    op.animation_id = str(animation_id)
+                
             # draw the values for the bone blend masks for each layer
     
     def draw(self, context):
@@ -4859,6 +4956,7 @@ class HellDivers2ToolsPanel(Panel):
         row.operator("helldiver2.github", icon='URL', text= "")
         row = layout.row(); row = layout.row()
         row.operator("helldiver2.archive_import_default", icon= 'SOLO_ON', text="")
+        row.operator("helldiver2.archive_import_avatar", icon= 'OUTLINER_OB_ARMATURE', text="")
         row.operator("helldiver2.search_archives", icon= 'VIEWZOOM')
         row.operator("helldiver2.archive_unloadall", icon= 'FILE_REFRESH', text="")
         row = layout.row()
@@ -5429,6 +5527,8 @@ classes = (
     SetBoneRagdollOperator,
     AddLightOperator,
     ViewChangelogOperator,
+    LoadPlayerAvatarOperator,
+    StateMachineAnimationIDOperator,
 )
 
 Global_TocManager = TocManager()

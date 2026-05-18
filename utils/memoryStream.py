@@ -32,7 +32,11 @@ class MemoryStream:
         self.Location = Location
         if self.Location > len(self.Data):
             missing_bytes = self.Location - len(self.Data)
-            self.Data.extend(bytearray(missing_bytes))
+            try:
+                self.Data.extend(bytearray(missing_bytes))
+            except (OverflowError, MemoryError):
+                self.Data = bytearray()
+                raise ValueError(f"Cannot seek to position {Location}: data size {missing_bytes} is too large")
 
     def tell(self): # Get Position In Stream
         return self.Location

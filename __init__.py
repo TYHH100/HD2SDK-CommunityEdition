@@ -556,28 +556,34 @@ class TocEntry:
 
     # -- Write TocEntry Data -- #
     def SerializeData(self, TocFile: MemoryStream, GpuFile, StreamFile):
-        if TocFile.IsReading():
-            TocFile.seek(self.TocDataOffset)
-            self.TocData = bytearray(self.TocDataSize)
-        elif TocFile.IsWriting():
-            self.TocDataOffset = TocFile.tell()
-        self.TocData = TocFile.bytes(self.TocData)
+        try:
+            if TocFile.IsReading():
+                TocFile.seek(self.TocDataOffset)
+                self.TocData = bytearray(self.TocDataSize)
+            elif TocFile.IsWriting():
+                self.TocDataOffset = TocFile.tell()
+            self.TocData = TocFile.bytes(self.TocData)
 
-        if GpuFile.IsWriting(): self.GpuResourceOffset = ceil(float(GpuFile.tell())/64)*64
-        if self.GpuResourceSize > 0:
-            GpuFile.seek(self.GpuResourceOffset)
-            if GpuFile.IsReading(): self.GpuData = bytearray(self.GpuResourceSize)
-            self.GpuData = GpuFile.bytes(self.GpuData)
+            if GpuFile.IsWriting(): self.GpuResourceOffset = ceil(float(GpuFile.tell())/64)*64
+            if self.GpuResourceSize > 0:
+                GpuFile.seek(self.GpuResourceOffset)
+                if GpuFile.IsReading(): self.GpuData = bytearray(self.GpuResourceSize)
+                self.GpuData = GpuFile.bytes(self.GpuData)
 
-        if StreamFile.IsWriting(): self.StreamOffset = ceil(float(StreamFile.tell())/64)*64
-        if self.StreamSize > 0:
-            StreamFile.seek(self.StreamOffset)
-            if StreamFile.IsReading(): self.StreamData = bytearray(self.StreamSize)
-            self.StreamData = StreamFile.bytes(self.StreamData)
-        if GpuFile.IsReading():
-            self.TocData_OLD    = bytearray(self.TocData)
-            self.GpuData_OLD    = bytearray(self.GpuData)
-            self.StreamData_OLD = bytearray(self.StreamData)
+            if StreamFile.IsWriting(): self.StreamOffset = ceil(float(StreamFile.tell())/64)*64
+            if self.StreamSize > 0:
+                StreamFile.seek(self.StreamOffset)
+                if StreamFile.IsReading(): self.StreamData = bytearray(self.StreamSize)
+                self.StreamData = StreamFile.bytes(self.StreamData)
+            if GpuFile.IsReading():
+                self.TocData_OLD    = bytearray(self.TocData)
+                self.GpuData_OLD    = bytearray(self.GpuData)
+                self.StreamData_OLD = bytearray(self.StreamData)
+        except (OverflowError, MemoryError, ValueError) as e:
+            PrettyPrint(f"Skipping large entry {self.FileID}: {e}", "warn")
+            self.TocData = bytearray()
+            self.GpuData = bytearray()
+            self.StreamData = bytearray()
 
     # -- Get Data -- #
     def GetData(self):
@@ -794,7 +800,10 @@ class StreamToc:
         if SerializeData:
             for entry_type, entries in self.TocDict.items():
                 for FileEntry in entries.values():
-                    FileEntry.SerializeData(self.TocFile, self.GpuFile, self.StreamFile)
+                    try:
+                        FileEntry.SerializeData(self.TocFile, self.GpuFile, self.StreamFile)
+                    except Exception as e:
+                        PrettyPrint(f"Failed to serialize entry {FileEntry.FileID}: {e}", "error")
 
         # re-write toc entry info with updated offsets
         if self.TocFile.IsWriting():
@@ -1401,6 +1410,15 @@ def CreateAddonMaterial(ID, StingrayMat, mat, Entry):
     
     inputNode = nodeTree.nodes.get('Group Input')
     outputNode = nodeTree.nodes.get('Group Output')
+    
+    if inputNode is None:
+        inputNode = nodeTree.nodes.new('NodeGroupInput')
+        inputNode.location = (-400, 0)
+    
+    if outputNode is None:
+        outputNode = nodeTree.nodes.new('NodeGroupOutput')
+        outputNode.location = (400, 0)
+    
     bsdf = nodeTree.nodes.new('ShaderNodeBsdfPrincipled')
     bsdf.location = (50, 0)
     separateColor = nodeTree.nodes.new('ShaderNodeSeparateColor')

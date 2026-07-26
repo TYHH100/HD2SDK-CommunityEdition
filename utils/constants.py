@@ -14,6 +14,7 @@ AnimationID = 10600967118105529382
 StateMachineID = 11855396184103720540
 StringID = 979299457696010195
 PhysicsID = 6877563742545042104
+XamlID = 5097092548853106021
 
 Global_MaterialParentIDs = {
     3430705909399566334 : "basic+",
@@ -75,6 +76,7 @@ Global_TypeIDs = [
     0xf7a09f8bb35a1d49, #havok_physics_properties
     0xfcaaf813b4d3cc1e, #camera_shake
     0x5ee65304478f8db5, #bik2
+    0x46bc82aae9ae0565, #unknown
 ]
 
 Global_IconDict = {
@@ -91,4 +93,5 @@ Global_IconDict = {
     StateMachineID: 'DRIVER',
     StringID: 'WORDWRAP_ON',
     PhysicsID: 'PHYSICS',
+    XamlID: 'WORKSPACE',
 }
